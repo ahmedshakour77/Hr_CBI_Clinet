@@ -1,0 +1,17 @@
+# Release signing configuration template.
+# DO NOT COMMIT REAL PASSWORDS OR PRODUCTION KEYSTORE FILES TO VERSION CONTROL.
+# 
+# Option A (Recommended for CI/CD & Production):
+# Set the following Environment Variables instead of using this file:
+#   ANDROID_KEYSTORE_PATH=/path/to/secure/upload-keystore.jks
+#   ANDROID_KEYSTORE_PASSWORD=your_secure_store_password_min_24_chars
+#   ANDROID_KEY_ALIAS=upload
+#   ANDROID_KEY_PASSWORD=your_secure_key_password_min_24_chars
+#
+# Option B (Local builds only):
+# Copy this file to key.properties (or keep it outside the repository via KEY_PROPERTIES_PATH):
+#
+# storePassword=your_secure_keystore_password
+# keyPassword=your_secure_key_password
+# keyAlias=upload
+# storeFile=/absolute/or/relative/path/to/upload-keystore.jks

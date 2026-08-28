@@ -1,0 +1,47 @@
+name: cbi_app
+description: "CBI HR Mobile Application"
+publish_to: 'none'
+
+version: 1.0.0+13
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Microsoft Entra ID sign-in via OAuth2 / OIDC authorization code + PKCE.
+  flutter_appauth: ^12.0.2
+
+  # Platform passkey (WebAuthn / FIDO2) ceremonies on Android and iOS.
+  passkeys: ^2.22.1
+
+  # Token storage backed by the Android Keystore / iOS Keychain.
+  flutter_secure_storage: ^11.0.0
+
+  # Talks to the passkey relying-party server in server/.
+  http: ^1.2.0
+
+  # Device hardware and OS information.
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - logo2.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "logo2.png"
