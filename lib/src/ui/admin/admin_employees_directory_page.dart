@@ -32,6 +32,7 @@ class _AdminEmployeesDirectoryPageState extends State<AdminEmployeesDirectoryPag
   List<EmployeeProfile> _filteredEmployees = [];
   bool _isLoading = true;
   String? _errorMessage;
+  String? _loadingProgressText;
   String? _selectedFormation;
   final Set<String> _formations = {};
 
@@ -52,10 +53,20 @@ class _AdminEmployeesDirectoryPageState extends State<AdminEmployeesDirectoryPag
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _loadingProgressText = null;
     });
 
     try {
-      final list = await widget.auth.fetchAllEmployees();
+      final list = await widget.auth.fetchAllEmployees(
+        onProgress: (loaded, total) {
+          if (!mounted) return;
+          setState(() {
+            _loadingProgressText = (total != null && total > 0)
+                ? 'جاري استقدام بيانات الموظفين... تم جلب $loaded من $total'
+                : 'جاري استقدام بيانات الموظفين... تم جلب $loaded موظف';
+          });
+        },
+      );
       if (!mounted) return;
 
       final formations = <String>{};
@@ -70,6 +81,7 @@ class _AdminEmployeesDirectoryPageState extends State<AdminEmployeesDirectoryPag
         _formations.clear();
         _formations.addAll(formations);
         _isLoading = false;
+        _loadingProgressText = null;
       });
       _applyFilter();
     } on AuthException catch (e) {
@@ -191,21 +203,25 @@ class _AdminEmployeesDirectoryPageState extends State<AdminEmployeesDirectoryPag
                     child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF38BDF8), size: 22),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'دليل الموظفين والمستمسكات',
-                          style: TextStyle(
+                          _allEmployees.isNotEmpty
+                              ? 'دليل الموظفين والمستمسكات (${_allEmployees.length} موظف)'
+                              : 'دليل الموظفين والمستمسكات',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
-                          'صلاحية الإدارة: فحص وتحديث وثائق الموظفين',
-                          style: TextStyle(
+                          _allEmployees.isNotEmpty
+                              ? 'صلاحية الإدارة: فحص وتحديث وثائق ${_allEmployees.length} موظف'
+                              : 'صلاحية الإدارة: فحص وتحديث وثائق الموظفين',
+                          style: const TextStyle(
                             color: Colors.white54,
                             fontSize: 11,
                           ),
@@ -321,15 +337,16 @@ class _AdminEmployeesDirectoryPageState extends State<AdminEmployeesDirectoryPag
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Color(0xFF0F62FE)),
-            SizedBox(height: 16),
+            const CircularProgressIndicator(color: Color(0xFF0F62FE)),
+            const SizedBox(height: 16),
             Text(
-              'جاري استقدام بيانات الموظفين بأحدث التقنيات...',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+              _loadingProgressText ?? 'جاري استقدام بيانات جميع موظفي البنك...',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

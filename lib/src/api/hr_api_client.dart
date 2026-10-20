@@ -532,68 +532,213 @@ class HrApiClient {
     return null;
   }
 
-  /// HR Admin: Fetches the directory of all employees.
-  /// GET /api/employees
-  Future<List<EmployeeProfile>> fetchAllEmployees(String sessionToken) async {
-    final uri = _uri('/api/employees');
-    debugPrint('[HTTP_API] >>> GET $uri');
-    late final http.Response response;
+  /// HR Admin: Fetches the directory of ALL employees across all pages.
+  /// Automatically resolves server pagination (page / pageNumber / pageSize / limit / offset)
+  /// and loops until every single employee record is retrieved.
+  Future<List<EmployeeProfile>> fetchAllEmployees(
+    String sessionToken, {
+    void Function(int loadedCount, int? totalCount)? onProgress,
+  }) async {
+    // Strategy 1: Attempt to fetch with large pageSize to get all in one call if server permits
     try {
-      response = await _http.get(
-        uri,
-        headers: {
-          'content-type': 'application/json',
-          'authorization': 'Bearer $sessionToken',
-        },
-      );
-      debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/employees (${response.body.length} bytes)');
-    } catch (error) {
-      debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
-      throw AuthException(
-        'تعذر الاتصال بالخادم لجلب قائمة الموظفين. يرجى التحقق من اتصال الإنترنت.',
-        cause: error,
-      );
-    }
-
-    if (response.statusCode == 403) {
-      throw const AuthException(
-        'عذراً، هذا الحساب غير مصرح له بالوصول إلى قائمة الموظفين (403 Forbidden). هذه الميزة متاحة لمدراء النظام ومسؤولي الموارد البشرية فقط.',
-      );
-    }
-
-    final dynamic decoded;
-    try {
-      decoded = jsonDecode(response.body);
-    } catch (_) {
-      throw AuthException(
-        'فشل الطلب من الخادم (رمز الاستجابة ${response.statusCode}).',
-        cause: response.body,
-      );
-    }
-
-    final List<dynamic> list;
-    if (decoded is List) {
-      list = decoded;
-    } else if (decoded is Map<String, dynamic>) {
-      if (decoded['data'] is List) {
-        list = decoded['data'] as List;
-      } else if (decoded['employees'] is List) {
-        list = decoded['employees'] as List;
-      } else if (decoded['items'] is List) {
-        list = decoded['items'] as List;
-      } else if (decoded['result'] is List) {
-        list = decoded['result'] as List;
-      } else {
-        list = [];
+      final allAtOnce = await _tryFetchAllInOneCall(sessionToken);
+      if (allAtOnce != null && allAtOnce.length > 50) {
+        debugPrint('[HTTP_API] Successfully retrieved all ${allAtOnce.length} employees in a single request!');
+        onProgress?.call(allAtOnce.length, allAtOnce.length);
+        return allAtOnce;
       }
-    } else {
-      list = [];
+    } catch (_) {}
+
+    // Strategy 2: Page-by-page fetching until exhausted
+    return await _fetchPaginatedEmployees(sessionToken, onProgress: onProgress);
+  }
+
+  Future<List<EmployeeProfile>?> _tryFetchAllInOneCall(String sessionToken) async {
+    for (final paramName in ['pageSize', 'limit']) {
+      final uri = _uri('/api/employees', {paramName: '2000'});
+      try {
+        final response = await _http.get(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            'authorization': 'Bearer $sessionToken',
+          },
+        );
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          final list = _extractListFromDecoded(decoded);
+          if (list.length > 50) {
+            return list.map((e) => EmployeeProfile.fromJson(e)).toList();
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<List<EmployeeProfile>> _fetchPaginatedEmployees(
+    String sessionToken, {
+    void Function(int loadedCount, int? totalCount)? onProgress,
+  }) async {
+    final allProfiles = <EmployeeProfile>[];
+    final seenIds = <String>{};
+    int page = 1;
+    int? reportedTotal;
+    const int maxPages = 60; // Up to 3,000 employees
+
+    String pageParam = 'page';
+    String sizeParam = 'pageSize';
+
+    while (page <= maxPages) {
+      final query = <String, String>{
+        pageParam: page.toString(),
+        sizeParam: '50',
+      };
+      // For page 1, prefer plain endpoint first to match existing server contract
+      final uri = (page == 1)
+          ? _uri('/api/employees')
+          : _uri('/api/employees', query);
+
+      debugPrint('[HTTP_API] >>> GET $uri (Page $page)');
+      late final http.Response response;
+      try {
+        response = await _http.get(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            'authorization': 'Bearer $sessionToken',
+          },
+        );
+        debugPrint('[HTTP_API] <<< ${response.statusCode} GET $uri (Page $page, ${response.body.length} bytes)');
+      } catch (error) {
+        if (page == 1) {
+          debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
+          throw AuthException(
+            'تعذر الاتصال بالخادم لجلب قائمة الموظفين. يرجى التحقق من اتصال الإنترنت.',
+            cause: error,
+          );
+        }
+        break;
+      }
+
+      if (response.statusCode == 403) {
+        throw const AuthException(
+          'عذراً، هذا الحساب غير مصرح له بالوصول إلى قائمة الموظفين (403 Forbidden). هذه الميزة متاحة لمدراء النظام ومسؤولي الموارد البشرية فقط.',
+        );
+      }
+
+      if (response.statusCode != 200) {
+        // If page 2 failed with query params, try alternative param names (pageNumber, offset)
+        if (page == 2 && pageParam == 'page') {
+          debugPrint('[HTTP_API] page 2 failed with "page", trying "pageNumber" param');
+          pageParam = 'pageNumber';
+          continue;
+        } else if (page == 2 && pageParam == 'pageNumber') {
+          debugPrint('[HTTP_API] page 2 failed with "pageNumber", trying "offset" param');
+          pageParam = 'offset';
+          continue;
+        }
+        if (page == 1) {
+          throw AuthException(
+            'فشل استرجاع قائمة الموظفين من الخادم (رمز ${response.statusCode}).',
+            cause: response.body,
+          );
+        }
+        break;
+      }
+
+      final dynamic decoded;
+      try {
+        decoded = jsonDecode(response.body);
+      } catch (_) {
+        if (page == 1) {
+          throw AuthException(
+            'فشل تحليل استجابة الخادم لقائمة الموظفين.',
+            cause: response.body,
+          );
+        }
+        break;
+      }
+
+      if (page == 1 && decoded is Map<String, dynamic>) {
+        final meta = Map<String, dynamic>.from(decoded)
+          ..remove('data')
+          ..remove('employees')
+          ..remove('items')
+          ..remove('result');
+        debugPrint('[HTTP_API] /api/employees page 1 metadata: $meta');
+
+        final rawTotal = decoded['total'] ??
+            decoded['totalCount'] ??
+            decoded['totalEmployees'] ??
+            decoded['count'] ??
+            decoded['totalRecords'];
+        if (rawTotal is num) {
+          reportedTotal = rawTotal.toInt();
+        }
+      }
+
+      final list = _extractListFromDecoded(decoded);
+      if (list.isEmpty) break;
+
+      int newOnThisPage = 0;
+      for (final raw in list) {
+        final profile = EmployeeProfile.fromJson(raw);
+        final id = profile.employeeID ?? '${profile.name}_${profile.jobTitle}_${allProfiles.length}';
+        if (!seenIds.contains(id)) {
+          seenIds.add(id);
+          allProfiles.add(profile);
+          newOnThisPage++;
+        }
+      }
+
+      onProgress?.call(allProfiles.length, reportedTotal);
+
+      // If page 2 returned duplicate items from page 1, try alternative pagination style
+      if (newOnThisPage == 0 && page == 2) {
+        if (pageParam == 'page') {
+          debugPrint('[HTTP_API] page=2 returned duplicate items, switching to pageNumber parameter');
+          pageParam = 'pageNumber';
+          continue;
+        } else if (pageParam == 'pageNumber') {
+          debugPrint('[HTTP_API] pageNumber=2 returned duplicate items, switching to offset parameter');
+          pageParam = 'offset';
+          continue;
+        } else {
+          break;
+        }
+      } else if (newOnThisPage == 0) {
+        break;
+      }
+
+      if (reportedTotal != null && allProfiles.length >= reportedTotal) {
+        break;
+      }
+
+      if (list.length < 50) {
+        break;
+      }
+
+      page++;
     }
 
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map((e) => EmployeeProfile.fromJson(e))
-        .toList();
+    debugPrint('[HTTP_API] Paginated fetch completed: loaded ${allProfiles.length} employees (total reported: $reportedTotal)');
+    return allProfiles;
+  }
+
+  List<Map<String, dynamic>> _extractListFromDecoded(dynamic decoded) {
+    if (decoded is List) {
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    }
+    if (decoded is Map<String, dynamic>) {
+      for (final key in ['data', 'employees', 'items', 'result', 'list', 'records']) {
+        final val = decoded[key];
+        if (val is List) {
+          return val.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+    }
+    return [];
   }
 
   /// Fetches the full profile of a specific employee by ID or employee number.

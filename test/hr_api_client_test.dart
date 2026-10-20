@@ -306,5 +306,49 @@ void main() {
       expect(employees.first.name, 'أحمد فالح');
       expect(employees.last.employeeID, '102');
     });
+
+    test('fetchAllEmployees automatically paginates and fetches all employees across multiple pages', () async {
+      int requestCount = 0;
+      final mockClient = MockClient((request) async {
+        requestCount++;
+        final page = request.url.queryParameters['page'] ?? '1';
+        if (page == '1' || requestCount == 1) {
+          // Page 1: returns 50 employees
+          final list50 = List.generate(
+            50,
+            (i) => {'employeeID': 'EMP-$i', 'name': 'موظف $i', 'formation': 'دائرة العمليات'},
+          );
+          return http.Response(
+            jsonEncode({'total': 75, 'data': list50}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        } else {
+          // Page 2: returns remaining 25 employees
+          final list25 = List.generate(
+            25,
+            (i) => {'employeeID': 'EMP-${i + 50}', 'name': 'موظف ${i + 50}', 'formation': 'دائرة الإصدار'},
+          );
+          return http.Response(
+            jsonEncode({'total': 75, 'data': list25}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      });
+
+      final client = HrApiClient(httpClient: mockClient);
+      final progressUpdates = <int>[];
+      final employees = await client.fetchAllEmployees(
+        'admin_token',
+        onProgress: (loaded, total) => progressUpdates.add(loaded),
+      );
+
+      expect(employees.length, 75);
+      expect(employees.first.employeeID, 'EMP-0');
+      expect(employees.last.employeeID, 'EMP-74');
+      expect(progressUpdates, contains(50));
+      expect(progressUpdates.last, 75);
+    });
   });
 }

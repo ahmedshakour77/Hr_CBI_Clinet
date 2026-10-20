@@ -379,13 +379,15 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// HR Admin: Fetches directory of all employees.
-  Future<List<EmployeeProfile>> fetchAllEmployees() async {
+  /// HR Admin: Fetches directory of all employees across all pages.
+  Future<List<EmployeeProfile>> fetchAllEmployees({
+    void Function(int loadedCount, int? totalCount)? onProgress,
+  }) async {
     final token = await _sessions.readAccessToken();
     if (token == null) {
       throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
     }
-    return await _api.fetchAllEmployees(token);
+    return await _api.fetchAllEmployees(token, onProgress: onProgress);
   }
 
   /// Fetches single employee details.
