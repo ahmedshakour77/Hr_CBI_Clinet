@@ -16,7 +16,7 @@ library;
 /// ```
 ///    --dart-define-from-file=env.json
 /// Keep them in `--dart-define-from-file=env.json` if the command line gets
-/// unwieldy.
+/// unwieldy.   flutter run --device 1B011FDF6004CN --dart-define-from-file=env.json
 class AppConfig {
   const AppConfig._();
 

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../auth/auth_controller.dart';
+import 'admin/admin_employees_directory_page.dart';
+import 'tabs/documents_tab.dart';
 import 'tabs/profile_tab.dart';
 import 'tabs/services_tab.dart';
 import 'tabs/settings_tab.dart';
 
-/// Main Application Shell hosting the NavigationBar with 3 primary modules:
+/// Main Application Shell hosting the NavigationBar:
 /// 1. الملف الوظيفي (Profile)
-/// 2. الخدمات الذاتية (Self-Services)
-/// 3. الإعدادات والأمان (Settings & Passkeys)
+/// 2. المستمسكات الرسمية (Official Documents Hub: National Card, Residence, Passport)
+/// 3. إدارة الموظفين (Admin Directory - for HR Admins)
+/// 4. الخدمات الذاتية (Self-Services)
+/// 5. الإعدادات والأمان (Settings & Passkeys)
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key, required this.auth});
 
@@ -142,33 +146,84 @@ class _MainScreenState extends State<MainScreen> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final auth = widget.auth;
+    final isAdmin = auth.isAdmin;
 
-    final titles = ['الملف الوظيفي', 'الخدمات الذاتية', 'الإعدادات والأمان'];
+    // Dynamically build tab configuration based on roles & permissions
+    final pages = <Widget>[
+      ProfileTab(auth: auth),
+      DocumentsTab(auth: auth),
+      if (isAdmin) AdminEmployeesDirectoryPage(auth: auth, isEmbedded: true),
+      ServicesTab(auth: auth),
+      SettingsTab(auth: auth),
+    ];
+
+    final titles = <String>[
+      'الملف الوظيفي',
+      'المستمسكات الرسمية',
+      if (isAdmin) 'دليل الموظفين',
+      'الخدمات الذاتية',
+      'الإعدادات والأمان',
+    ];
+
+    final destinations = <NavigationDestination>[
+      const NavigationDestination(
+        icon: Icon(Icons.badge_outlined),
+        selectedIcon: Icon(Icons.badge_rounded, color: Color(0xFF0F62FE)),
+        label: 'الملف',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.folder_shared_outlined),
+        selectedIcon: Icon(Icons.folder_shared_rounded, color: Color(0xFF0F62FE)),
+        label: 'المستمسكات',
+      ),
+      if (isAdmin)
+        const NavigationDestination(
+          icon: Icon(Icons.admin_panel_settings_outlined),
+          selectedIcon: Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF0F62FE)),
+          label: 'الإدارة',
+        ),
+      const NavigationDestination(
+        icon: Icon(Icons.auto_awesome_mosaic_outlined),
+        selectedIcon: Icon(Icons.auto_awesome_mosaic_rounded, color: Color(0xFF0F62FE)),
+        label: 'الخدمات',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings_rounded, color: Color(0xFF0F62FE)),
+        label: 'الإعدادات',
+      ),
+    ];
+
+    final safeIndex = _currentIndex.clamp(0, pages.length - 1);
+    final showCustomAppBar = !(isAdmin && safeIndex == 2);
 
     return Scaffold(
       backgroundColor: colors.surface,
-      appBar: AppBar(
-        title: Text(
-          titles[_currentIndex],
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: auth.busy ? null : auth.refreshProfile,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'تحديث البيانات',
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
+      appBar: showCustomAppBar
+          ? AppBar(
+              title: Text(
+                titles[safeIndex],
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              centerTitle: true,
+              actions: [
+                IconButton(
+                  onPressed: auth.busy
+                      ? null
+                      : () async {
+                          await auth.refreshProfile();
+                          await auth.loadMyDocuments();
+                        },
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: 'تحديث البيانات',
+                ),
+                const SizedBox(width: 4),
+              ],
+            )
+          : null,
       body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          ProfileTab(auth: auth),
-          ServicesTab(auth: auth),
-          SettingsTab(auth: auth),
-        ],
+        index: safeIndex,
+        children: pages,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -181,28 +236,12 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         child: NavigationBar(
-          selectedIndex: _currentIndex,
+          selectedIndex: safeIndex,
           onDestinationSelected: (index) => setState(() => _currentIndex = index),
           backgroundColor: Colors.transparent,
           indicatorColor: colors.primary.withValues(alpha: 0.14),
           elevation: 0,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.badge_outlined),
-              selectedIcon: Icon(Icons.badge_rounded, color: Color(0xFF0F62FE)),
-              label: 'الملف',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.auto_awesome_mosaic_outlined),
-              selectedIcon: Icon(Icons.auto_awesome_mosaic_rounded, color: Color(0xFF0F62FE)),
-              label: 'الخدمات',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings_rounded, color: Color(0xFF0F62FE)),
-              label: 'الإعدادات',
-            ),
-          ],
+          destinations: destinations,
         ),
       ),
     );

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@500;700&family=Noto+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#F4F6F4;--green:#123B36;--green2:#2F7A6B;--violet:#7A4A8C;--copper:#B8643E;--ink:#1A2422;--ink2:#5E6B68;--rule:#DCE3E0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:390px;height:844px;overflow:hidden;background:var(--ground);color:var(--ink);font-family:'Noto Sans Arabic',sans-serif}
+.band{background:var(--green);color:#EAF2EF;height:270px;position:relative;overflow:hidden;padding:44px 16px 0}
+.rosette{position:absolute;left:-70px;top:30px;width:300px;height:300px;border-radius:50%;
+ background:repeating-radial-gradient(circle at 50% 50%,transparent 0 5px,rgba(234,242,239,.13) 5px 6px),
+ repeating-conic-gradient(from 0deg,rgba(234,242,239,.10) 0 2deg,transparent 2deg 9deg)}
+.top{display:flex;justify-content:space-between;align-items:center;height:56px;position:relative}
+.top h1{font:700 18px 'Noto Kufi Arabic'}
+.seal{width:36px;height:36px;border-radius:50%;border:2px solid var(--copper);display:grid;place-items:center;color:#E9B79C;font-size:11px;font-weight:700}
+.who{position:relative;margin-top:22px}
+.who p{font-size:13px;opacity:.8}
+.who h2{font:700 26px/1.3 'Noto Kufi Arabic';margin:4px 0 10px}
+.chips{display:flex;gap:8px}
+.chips span{font-size:12px;border:1px solid rgba(234,242,239,.4);border-radius:8px;padding:4px 10px}
+.micro{position:absolute;bottom:14px;right:16px;left:16px;font-size:7px;letter-spacing:1px;opacity:.35;white-space:nowrap;overflow:hidden}
+.grid{padding:20px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.svc{background:#fff;border-radius:14px;padding:14px;min-height:104px;border-top:4px solid var(--c);display:flex;flex-direction:column;justify-content:space-between}
+.svc b{font:700 16px/1.35 'Noto Kufi Arabic'}
+.svc span{font-size:12px;color:var(--ink2)}
+.pending{margin:0 16px;background:#fff;border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-inline-start:4px solid var(--violet)}
+.pending b{font-size:15px}.pending span{font-size:12px;color:var(--ink2);display:block}
+.pending em{font-style:normal;font-size:12px;color:var(--violet);font-weight:700;border:1.5px solid var(--violet);border-radius:8px;padding:3px 8px}
+.nav{position:absolute;bottom:0;left:0;right:0;height:80px;background:#fff;border-top:1px solid var(--rule);display:flex;justify-content:space-around;padding-top:10px}
+.nav div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:var(--ink2);width:72px}
+.nav i{width:56px;height:30px;border-radius:15px;display:block;border:1.5px solid var(--ink2)}
+.nav .on{color:var(--green);font-weight:700}.nav .on i{background:var(--green2);border-color:var(--green2)}
+</style></head><body>
+<div class="band"><div class="rosette"></div>
+ <div class="top"><div class="seal">CBI</div><h1>الموارد البشرية</h1><span style="width:36px"></span></div>
+ <div class="who"><p>الرقم الوظيفي ١٠٤٨٢٢</p><h2>أحمد خالد الربيعي</h2>
+  <div class="chips"><span>الدرجة السادسة</span><span>المرحلة ٣</span><span>الرقابة المصرفية</span></div></div>
+ <div class="micro">البنك المركزي العراقي · CENTRAL BANK OF IRAQ · البنك المركزي العراقي · CENTRAL BANK OF IRAQ · البنك المركزي العراقي</div>
+</div>
+<div class="grid">
+ <div class="svc" style="--c:#2F7A6B"><b>الإجازات والدوام</b><span>طلب · رصيد · سجل الحضور</span></div>
+ <div class="svc" style="--c:#7A4A8C"><b>الرواتب</b><span>كشف الراتب · السلف</span></div>
+ <div class="svc" style="--c:#B8643E"><b>الكتب الرسمية</b><span>تأييد · شهادة راتب</span></div>
+ <div class="svc" style="--c:#2B5C8A"><b>الهوية الرقمية</b><span>تجريبي</span></div>
+</div>
+<div class="pending"><div><b>طلب إجازة اعتيادية</b><span>٥ أيام · قُدِّم ١٢/١٠</span></div><em>قيد التدقيق</em></div>
+<div class="nav"><div class="on"><i></i>الرئيسية</div><div><i></i>طلباتي</div><div><i></i>ملفي</div><div><i></i>الإعدادات</div></div>
+</body></html>

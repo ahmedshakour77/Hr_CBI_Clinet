@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@500;700&family=Noto+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#fff;--ink:#14182B;--ink2:#5B6075;--rule:#E3E4EA;--stamp:#4B3A9E;--copper:#B8643E;--red:#C62F2F;--tint:#F5F5F8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:390px;height:844px;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'Noto Sans Arabic',sans-serif}
+.status{height:44px}
+.bar{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--rule)}
+.seal{width:36px;height:36px;border-radius:50%;border:2px solid var(--copper);display:grid;place-items:center;color:var(--copper);font:700 11px 'Noto Sans Arabic'}
+.bar h1{font:700 20px 'Noto Naskh Arabic'}
+.bar .av{width:36px;height:36px;border-radius:50%;background:var(--tint);display:grid;place-items:center;font-size:14px;font-weight:700}
+.hello{padding:20px 16px 12px}
+.hello p{font-size:13px;color:var(--ink2)}
+.hello h2{font:700 24px/1.3 'Noto Naskh Arabic';margin-top:2px}
+.new{margin:8px 16px 20px;height:52px;border-radius:12px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:16px}
+.sec{display:flex;justify-content:space-between;align-items:baseline;padding:0 16px 10px}
+.sec h3{font-size:15px;font-weight:700}
+.sec a{font-size:13px;color:var(--ink2)}
+.letter{margin:0 16px 12px;border:1px solid var(--rule);border-radius:14px;padding:14px 16px;position:relative;min-height:112px}
+.letter.active{border-color:var(--stamp);box-shadow:inset 3px 0 0 var(--stamp)}
+.ref{display:grid;grid-template-columns:auto auto;gap:2px 8px;font-size:12px;color:var(--ink2);width:max-content}
+.ref b{color:var(--ink);font-weight:500;font-feature-settings:'tnum'}
+.letter h4{font:700 17px/1.4 'Noto Naskh Arabic';margin-top:10px;max-width:230px}
+.letter .sub{font-size:13px;color:var(--ink2);margin-top:2px}
+.stamp{position:absolute;left:16px;top:18px;width:78px;height:78px;border-radius:50%;border:2.5px solid currentColor;display:grid;place-items:center;text-align:center;transform:rotate(-12deg);font-weight:700;font-size:13px;line-height:1.25}
+.stamp::after{content:'';position:absolute;inset:5px;border-radius:50%;border:1px solid currentColor}
+.s-act{color:var(--stamp)}
+.s-done{color:var(--ink2)}
+.s-done::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:1px solid currentColor}
+.s-rcv{color:var(--ink2);opacity:.75}
+.s-rcv::after{display:none}
+.nav{position:absolute;bottom:0;left:0;right:0;height:80px;border-top:1px solid var(--rule);background:var(--paper);display:flex;justify-content:space-around;padding-top:10px}
+.nav div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:var(--ink2);width:72px}
+.nav i{width:56px;height:30px;border-radius:15px;display:block;border:1.5px solid var(--ink2)}
+.nav .on{color:var(--ink);font-weight:700}
+.nav .on i{background:var(--ink);border-color:var(--ink)}
+</style></head><body>
+<div class="status"></div>
+<div class="bar"><div class="seal">CBI</div><h1>الموارد البشرية</h1><div class="av">أخ</div></div>
+<div class="hello"><p>شعبة الرقابة المصرفية · الدرجة السادسة / المرحلة ٣</p><h2>صباح الخير، أحمد</h2></div>
+<div class="new">＋ طلب جديد</div>
+<div class="sec"><h3>طلباتي الجارية</h3><a>السجل الكامل</a></div>
+<div class="letter active">
+  <div class="ref"><span>العدد</span><b>٢٠٢٦/٤١٧</b><span>التاريخ</span><b>١٢ / ١٠ / ٢٠٢٦</b></div>
+  <h4>طلب إجازة اعتيادية</h4><div class="sub">٥ أيام · ١٩–٢٣ تشرين الأول</div>
+  <div class="stamp s-act">قيد<br>التدقيق</div>
+</div>
+<div class="letter">
+  <div class="ref"><span>العدد</span><b>٢٠٢٦/٣٩٨</b><span>التاريخ</span><b>٠٧ / ١٠ / ٢٠٢٦</b></div>
+  <h4>شهادة راتب</h4><div class="sub">موجهة إلى مصرف الرافدين</div>
+  <div class="stamp s-done">منجز</div>
+</div>
+<div class="letter">
+  <div class="ref"><span>العدد</span><b>٢٠٢٦/٤٢٢</b><span>التاريخ</span><b>١٤ / ١٠ / ٢٠٢٦</b></div>
+  <h4>كتاب تأييد استمرار بالخدمة</h4><div class="sub">لمن يهمه الأمر</div>
+  <div class="stamp s-rcv">وارد</div>
+</div>
+<div class="nav"><div class="on"><i></i>الرئيسية</div><div><i></i>طلباتي</div><div><i></i>ملفي</div><div><i></i>الإعدادات</div></div>
+</body></html>

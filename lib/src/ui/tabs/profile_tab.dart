@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../auth/auth_controller.dart';
+import '../../id_reader/id_reader.dart';
 import '../../models/employee_profile.dart';
 import '../widgets/profile_field.dart';
 import '../widgets/shadow_avatar.dart';
@@ -61,6 +62,27 @@ class ProfileTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 _PersonalDetailsCard(profile: profile),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const IdReaderPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.nfc_rounded, color: Color(0xFF0F62FE)),
+                  label: const Text(
+                    'قراءة وتدقيق البطاقة الوطنية / الجواز (NFC)',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 26),
 
                 const _SectionHeader(
@@ -211,6 +233,56 @@ class _HeroProfileHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (profile.roles.isNotEmpty || profile.isAdmin) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                if (profile.isAdmin)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.admin_panel_settings_rounded, size: 14, color: Color(0xFF8B5CF6)),
+                        SizedBox(width: 4),
+                        Text(
+                          'مسؤول إداري (HR Admin)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF8B5CF6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ...profile.roles.where((r) => r != 'HR_Admin').map((role) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        role == 'Employee' ? 'موظف معتمد' : role,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: colors.primary,
+                        ),
+                      ),
+                    )),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -462,12 +534,28 @@ class _JobDetailsCard extends StatelessWidget {
             label: 'تاريخ التعيين / المباشرة',
             value: _formatDate(profile.hireDate),
           ),
+          if (profile.administrativeUnit != null && profile.administrativeUnit!.isNotEmpty) ...[
+            const _Divider(),
+            ProfileField(
+              icon: Icons.domain_rounded,
+              label: 'الشعبة / الوحدة الإدارية',
+              value: profile.administrativeUnit,
+            ),
+          ],
           if (profile.lastJobTitleDate != null) ...[
             const _Divider(),
             ProfileField(
               icon: Icons.update_outlined,
               label: 'تاريخ نيل العنوان الحالي',
               value: _formatDate(profile.lastJobTitleDate),
+            ),
+          ],
+          if (profile.serviceStatus != null && profile.serviceStatus!.isNotEmpty) ...[
+            const _Divider(),
+            ProfileField(
+              icon: Icons.verified_user_outlined,
+              label: 'حالة الخدمة',
+              value: profile.serviceStatus,
             ),
           ],
         ],
@@ -559,6 +647,14 @@ class _PersonalDetailsCard extends StatelessWidget {
             label: 'الديانة',
             value: profile.religion,
           ),
+          if (profile.phoneNumber != null && profile.phoneNumber!.isNotEmpty) ...[
+            const _Divider(),
+            ProfileField(
+              icon: Icons.phone_android_rounded,
+              label: 'رقم الهاتف المعتمد',
+              value: profile.phoneNumber,
+            ),
+          ],
         ],
       ),
     );

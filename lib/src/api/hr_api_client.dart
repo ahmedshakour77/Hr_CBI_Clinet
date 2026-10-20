@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 
 import '../auth/auth_exception.dart';
 import '../config/app_config.dart';
+import '../id_reader/domain/entities/id_card_model.dart';
+import '../models/document_models.dart';
 import '../models/employee_profile.dart';
 import '../services/device_info_service.dart';
 
@@ -62,7 +64,18 @@ class HrApiClient {
     final uri = _uri(path);
     debugPrint('[HTTP_API] >>> POST $uri');
     if (body != null) {
-      debugPrint('[HTTP_API] Body: ${jsonEncode(body)}');
+      final summary = <String, dynamic>{};
+      for (final entry in body.entries) {
+        final val = entry.value;
+        if (val is String && val.startsWith('data:image')) {
+          summary[entry.key] = '[BASE64_IMAGE: ${(val.length / 1024).toStringAsFixed(1)} KB]';
+        } else if (val is String && val.length > 300) {
+          summary[entry.key] = '[LONG_STRING: ${val.length} chars]';
+        } else {
+          summary[entry.key] = val;
+        }
+      }
+      debugPrint('[HTTP_API] Body Payload Summary: ${jsonEncode(summary)}');
     }
 
     final headers = <String, String>{
@@ -78,6 +91,7 @@ class HrApiClient {
         body: body != null ? jsonEncode(body) : null,
       );
       debugPrint('[HTTP_API] <<< ${response.statusCode} POST $path (${response.body.length} bytes)');
+      debugPrint('[HTTP_API] Server Response: ${response.body}');
     } catch (error) {
       debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
       throw AuthException(
@@ -137,7 +151,10 @@ class HrApiClient {
     if (status == 404) {
       return 'عذراً، هذا الحساب غير مربوط بملف موظف في النظام. يرجى مراجعة إدارة الموارد البشرية.';
     }
-    if (status == 401 || status == 403) {
+    if (status == 403) {
+      return 'عذراً، لا تملك الصلاحية لتنفيذ هذا الإجراء (403 Forbidden). هذه العملية تتطلب صلاحيات إدارة الموارد البشرية (Admin/HR).';
+    }
+    if (status == 401) {
       return 'عذراً، هذا الحساب غير مصرح له بالدخول إلى النظام.';
     }
     if (code != null && code.isNotEmpty && !code.contains('_')) {
@@ -377,6 +394,243 @@ class HrApiClient {
         cause: response.body,
       );
     }
+  }
+
+  /// Updates the authenticated employee's own national card / passport record.
+  /// POST /api/employees/me/national-card
+  Future<Map<String, dynamic>> updateMyNationalCard({
+    required String sessionToken,
+    required IdCardModel idCard,
+  }) async {
+    return await _post(
+      '/api/employees/me/national-card',
+      bearer: sessionToken,
+      body: idCard.toApiPayload(),
+    );
+  }
+
+  /// HR Admin: Updates the national card / passport record for a specific employee.
+  /// POST /api/employees/{idOrNumber}/national-card
+  /// If the caller is a regular employee, the backend will reject with 403 Forbidden.
+  Future<Map<String, dynamic>> updateEmployeeNationalCard({
+    required String sessionToken,
+    required String employeeIdOrNumber,
+    required IdCardModel idCard,
+  }) async {
+    final cleanId = employeeIdOrNumber.trim();
+    if (cleanId.isEmpty || cleanId.toLowerCase() == 'me') {
+      return updateMyNationalCard(sessionToken: sessionToken, idCard: idCard);
+    }
+    return await _post(
+      '/api/employees/$cleanId/national-card',
+      bearer: sessionToken,
+      body: idCard.toApiPayload(),
+    );
+  }
+
+  /// Fetches the 3 official documents for the currently authenticated employee.
+  /// GET /api/documents/me
+  Future<EmployeeDocumentsBundle> getMyDocuments(String sessionToken) async {
+    final uri = _uri('/api/documents/me');
+    debugPrint('[HTTP_API] >>> GET $uri');
+    final response = await _http.get(
+      uri,
+      headers: {
+        'authorization': 'Bearer $sessionToken',
+        'content-type': 'application/json',
+      },
+    );
+    debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/documents/me (${response.body.length} bytes)');
+    final json = await _decode(response);
+    return EmployeeDocumentsBundle.fromJson(json);
+  }
+
+  /// Admin/Staff: Fetches the 3 official documents for a specified employee.
+  /// GET /api/documents/{employeeID}
+  Future<EmployeeDocumentsBundle> getEmployeeDocuments(
+    String sessionToken,
+    String employeeId,
+  ) async {
+    final cleanId = employeeId.trim();
+    if (cleanId.isEmpty || cleanId.toLowerCase() == 'me') {
+      return getMyDocuments(sessionToken);
+    }
+    final uri = _uri('/api/documents/$cleanId');
+    debugPrint('[HTTP_API] >>> GET $uri');
+    final response = await _http.get(
+      uri,
+      headers: {
+        'authorization': 'Bearer $sessionToken',
+        'content-type': 'application/json',
+      },
+    );
+    debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/documents/$cleanId (${response.body.length} bytes)');
+    final json = await _decode(response);
+    return EmployeeDocumentsBundle.fromJson(json);
+  }
+
+  /// Adds or updates a Passport (Electronic or Regular).
+  /// POST /api/documents/passport
+  Future<Map<String, dynamic>> savePassport({
+    required String sessionToken,
+    required Map<String, dynamic> payload,
+  }) async {
+    return await _post(
+      '/api/documents/passport',
+      bearer: sessionToken,
+      body: payload,
+    );
+  }
+
+  /// Adds or updates a Residence Card (بطاقة السكن).
+  /// POST /api/documents/residence
+  Future<Map<String, dynamic>> saveResidence({
+    required String sessionToken,
+    required Map<String, dynamic> payload,
+  }) async {
+    return await _post(
+      '/api/documents/residence',
+      bearer: sessionToken,
+      body: payload,
+    );
+  }
+
+  /// Adds or updates a National Card (البطاقة الوطنية الموحدة).
+  /// POST /api/documents/national-card
+  Future<Map<String, dynamic>> saveNationalCard({
+    required String sessionToken,
+    required Map<String, dynamic> payload,
+  }) async {
+    return await _post(
+      '/api/documents/national-card',
+      bearer: sessionToken,
+      body: payload,
+    );
+  }
+
+  /// Fetches authenticated document images (e.g. /api/national-cards/55/front-image)
+  Future<Uint8List?> getAuthenticatedImageBytes(
+    String sessionToken,
+    String relativeOrAbsoluteUrl,
+  ) async {
+    try {
+      final uri = relativeOrAbsoluteUrl.startsWith('http')
+          ? Uri.parse(relativeOrAbsoluteUrl)
+          : _uri(relativeOrAbsoluteUrl);
+      final response = await _http.get(
+        uri,
+        headers: {
+          'authorization': 'Bearer $sessionToken',
+        },
+      );
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        return response.bodyBytes;
+      }
+    } catch (e) {
+      debugPrint('[HTTP_API] Notice: could not fetch document image $relativeOrAbsoluteUrl: $e');
+    }
+    return null;
+  }
+
+  /// HR Admin: Fetches the directory of all employees.
+  /// GET /api/employees
+  Future<List<EmployeeProfile>> fetchAllEmployees(String sessionToken) async {
+    final uri = _uri('/api/employees');
+    debugPrint('[HTTP_API] >>> GET $uri');
+    late final http.Response response;
+    try {
+      response = await _http.get(
+        uri,
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $sessionToken',
+        },
+      );
+      debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/employees (${response.body.length} bytes)');
+    } catch (error) {
+      debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
+      throw AuthException(
+        'تعذر الاتصال بالخادم لجلب قائمة الموظفين. يرجى التحقق من اتصال الإنترنت.',
+        cause: error,
+      );
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException(
+        'عذراً، هذا الحساب غير مصرح له بالوصول إلى قائمة الموظفين (403 Forbidden). هذه الميزة متاحة لمدراء النظام ومسؤولي الموارد البشرية فقط.',
+      );
+    }
+
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      throw AuthException(
+        'فشل الطلب من الخادم (رمز الاستجابة ${response.statusCode}).',
+        cause: response.body,
+      );
+    }
+
+    final List<dynamic> list;
+    if (decoded is List) {
+      list = decoded;
+    } else if (decoded is Map<String, dynamic>) {
+      if (decoded['data'] is List) {
+        list = decoded['data'] as List;
+      } else if (decoded['employees'] is List) {
+        list = decoded['employees'] as List;
+      } else if (decoded['items'] is List) {
+        list = decoded['items'] as List;
+      } else if (decoded['result'] is List) {
+        list = decoded['result'] as List;
+      } else {
+        list = [];
+      }
+    } else {
+      list = [];
+    }
+
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map((e) => EmployeeProfile.fromJson(e))
+        .toList();
+  }
+
+  /// Fetches the full profile of a specific employee by ID or employee number.
+  /// GET /api/employees/{idOrNumber}
+  Future<EmployeeProfile> fetchEmployeeDetails(String sessionToken, String idOrNumber) async {
+    final cleanId = idOrNumber.trim();
+    if (cleanId.isEmpty || cleanId.toLowerCase() == 'me') {
+      return fetchProfile(sessionToken);
+    }
+    final uri = _uri('/api/employees/$cleanId');
+    debugPrint('[HTTP_API] >>> GET $uri');
+    late final http.Response response;
+    try {
+      response = await _http.get(
+        uri,
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $sessionToken',
+        },
+      );
+      debugPrint('[HTTP_API] <<< ${response.statusCode} GET $uri (${response.body.length} bytes)');
+    } catch (error) {
+      debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
+      throw AuthException(
+        'تعذر الاتصال بالخادم لجلب بيانات الموظف $cleanId.',
+        cause: error,
+      );
+    }
+
+    if (response.statusCode == 403) {
+      throw const AuthException(
+        'عذراً، هذا الحساب غير مصرح له بالوصول إلى بيانات هذا الموظف (403 Forbidden).',
+      );
+    }
+
+    final json = await _decode(response);
+    return EmployeeProfile.fromJson(json);
   }
 
   void dispose() => _http.close();

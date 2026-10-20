@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../auth/auth_controller.dart';
+import '../../id_reader/id_reader.dart';
+import '../admin/admin_employees_directory_page.dart';
 
 /// The Self-Services tab offering dynamic API-driven and standard HR requests for CBI employees.
 class ServicesTab extends StatefulWidget {
@@ -264,6 +266,52 @@ class _ServicesTabState extends State<ServicesTab> {
                         title: 'سجل كتب الشكر والتقدير',
                         description: 'عرض كتب الشكر والتقدير الوزارية والإدارية واحتساب القدم الوظيفي.',
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Category 4: الهوية والتحقق الرقمي
+                _CategoryHeader(
+                  title: 'الهوية والتحقق الرقمي',
+                  icon: Icons.fingerprint_rounded,
+                  badge: auth.isAdmin ? 'صلاحيات HR' : 'NFC الذكي',
+                ),
+                const SizedBox(height: 12),
+                _ServiceGrid(
+                  items: [
+                    if (auth.isAdmin)
+                      _ServiceItem(
+                        title: 'إدارة وتحديث بطاقات الموظفين (HR Admin)',
+                        subtitle: 'استعراض جميع الموظفين، التدقيق، وتحديث الشريحة عبر NFC',
+                        icon: Icons.admin_panel_settings_rounded,
+                        color: const Color(0xFF0F62FE),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AdminEmployeesDirectoryPage(auth: auth),
+                            ),
+                          );
+                        },
+                      ),
+                    _ServiceItem(
+                      title: auth.isAdmin ? 'قارئ بطاقتي أنا (كأدمن)' : 'قارئ البطاقة الموحدة والجواز',
+                      subtitle: auth.isAdmin
+                          ? 'تحديث بطاقتك الشخصية كمسؤول عبر المسار المباشر me'
+                          : 'قراءة وتدقيق الشريحة عبر NFC وتحديث بطاقتك الشخصية',
+                      icon: Icons.nfc_rounded,
+                      color: auth.isAdmin ? const Color(0xFF10B981) : const Color(0xFF0F62FE),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => IdReaderPage(
+                              auth: auth,
+                              targetEmployeeId: 'me',
+                              targetEmployeeName: profile?.name,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

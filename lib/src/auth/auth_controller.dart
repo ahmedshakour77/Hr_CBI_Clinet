@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../api/hr_api_client.dart';
+import '../id_reader/domain/entities/id_card_model.dart';
+import '../models/document_models.dart';
 import '../models/employee_profile.dart';
 import '../services/device_info_service.dart';
 import 'auth_exception.dart';
@@ -47,6 +49,9 @@ class AuthController extends ChangeNotifier {
   List<Map<String, dynamic>> _dynamicServices = [];
   bool _loadingServices = false;
 
+  EmployeeDocumentsBundle? _myDocuments;
+  bool _loadingDocuments = false;
+
   AuthStatus get status => _status;
   EmployeeProfile? get profile => _profile;
   Uint8List? get profilePhotoBytes => _profilePhotoBytes;
@@ -54,6 +59,15 @@ class AuthController extends ChangeNotifier {
   bool get loadingPasskeys => _loadingPasskeys;
   List<Map<String, dynamic>> get dynamicServices => _dynamicServices;
   bool get loadingServices => _loadingServices;
+  EmployeeDocumentsBundle? get myDocuments => _myDocuments;
+  bool get loadingDocuments => _loadingDocuments;
+
+  HrApiClient get api => _api;
+  SessionStore get sessions => _sessions;
+  Future<String?> getAccessToken() => _sessions.readAccessToken();
+
+  /// Whether current signed-in employee has Admin / HR rights
+  bool get isAdmin => _profile?.isAdmin ?? false;
 
   /// True immediately after an interactive Microsoft login (used to prompt automatic Passkey setup).
   bool get justSignedIn => _justSignedIn;
@@ -91,6 +105,7 @@ class AuthController extends ChangeNotifier {
         }
         _loadPhotoIfAvailable(token, _profile!);
         await loadMyPasskeys();
+        loadMyDocuments();
         _set(status: AuthStatus.signedIn);
         return;
       } catch (e) {
@@ -124,6 +139,7 @@ class AuthController extends ChangeNotifier {
           );
           _loadPhotoIfAvailable(serverAuth.accessToken, _profile!);
           await loadMyPasskeys();
+          loadMyDocuments();
           _set(status: AuthStatus.signedIn);
           return;
         } catch (e) {
@@ -153,6 +169,7 @@ class AuthController extends ChangeNotifier {
       }
       await _loadPhotoIfAvailable(token, _profile!);
       await loadMyPasskeys();
+      await loadMyDocuments();
       notifyListeners();
     } catch (e) {
       debugPrint('[AUTH_CONTROLLER] Refresh error: $e');
@@ -360,6 +377,175 @@ class AuthController extends ChangeNotifier {
       _loadingServices = false;
       notifyListeners();
     }
+  }
+
+  /// HR Admin: Fetches directory of all employees.
+  Future<List<EmployeeProfile>> fetchAllEmployees() async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) {
+      throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
+    }
+    return await _api.fetchAllEmployees(token);
+  }
+
+  /// Fetches single employee details.
+  Future<EmployeeProfile> fetchEmployeeDetails(String idOrNumber) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) {
+      throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
+    }
+    return await _api.fetchEmployeeDetails(token, idOrNumber);
+  }
+
+  /// Synchronizes National Card details and photos to the backend.
+  /// If [targetEmployeeId] is null or 'me', calls `POST /api/employees/me/national-card`.
+  /// If [targetEmployeeId] is specified, calls `POST /api/employees/{idOrNumber}/national-card`.
+  /// (Server automatically blocks non-admin callers with 403 Forbidden).
+  Future<Map<String, dynamic>> updateNationalCard({
+    required IdCardModel idCard,
+    String? targetEmployeeId,
+  }) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) {
+      throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
+    }
+    final clean = targetEmployeeId?.trim();
+    final effectiveEmpId = (clean != null && clean.isNotEmpty && clean.toLowerCase() != 'me')
+        ? clean
+        : null;
+
+    if (idCard.isPassport) {
+      // Passport endpoint: POST /api/documents/passport
+      try {
+        final payload = idCard.toPassportApiPayload(employeeId: effectiveEmpId);
+        final res = await _api.savePassport(sessionToken: token, payload: payload);
+        await loadMyDocuments();
+        return res;
+      } catch (e) {
+        debugPrint('[AUTH_CONTROLLER] Notice: /api/documents/passport fallback: $e');
+        if (effectiveEmpId == null) {
+          final res = await _api.updateMyNationalCard(sessionToken: token, idCard: idCard);
+          await loadMyDocuments();
+          return res;
+        } else {
+          return await _api.updateEmployeeNationalCard(
+            sessionToken: token,
+            employeeIdOrNumber: effectiveEmpId,
+            idCard: idCard,
+          );
+        }
+      }
+    } else {
+      // National Card endpoint: POST /api/documents/national-card
+      try {
+        final payload = idCard.toNationalCardApiPayload(employeeId: effectiveEmpId);
+        final res = await _api.saveNationalCard(sessionToken: token, payload: payload);
+        await loadMyDocuments();
+        return res;
+      } catch (e) {
+        debugPrint('[AUTH_CONTROLLER] Notice: /api/documents/national-card fallback: $e');
+        if (effectiveEmpId == null) {
+          final res = await _api.updateMyNationalCard(sessionToken: token, idCard: idCard);
+          await loadMyDocuments();
+          return res;
+        } else {
+          return await _api.updateEmployeeNationalCard(
+            sessionToken: token,
+            employeeIdOrNumber: effectiveEmpId,
+            idCard: idCard,
+          );
+        }
+      }
+    }
+  }
+
+  /// Fetches the current employee's documents from `/api/documents/me`.
+  Future<void> loadMyDocuments() async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) return;
+    _loadingDocuments = true;
+    notifyListeners();
+    try {
+      _myDocuments = await _api.getMyDocuments(token);
+    } catch (e) {
+      debugPrint('[AUTH_CONTROLLER] Notice: Could not load documents from server: $e');
+    } finally {
+      _loadingDocuments = false;
+      notifyListeners();
+    }
+  }
+
+  /// Admin: Fetches official documents for a specified employee.
+  Future<EmployeeDocumentsBundle?> fetchEmployeeDocuments(String employeeId) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) return null;
+    try {
+      return await _api.getEmployeeDocuments(token, employeeId);
+    } catch (e) {
+      debugPrint('[AUTH_CONTROLLER] Error fetching employee documents: $e');
+      return null;
+    }
+  }
+
+  /// Saves a Passport (Electronic or Regular).
+  /// POST /api/documents/passport
+  Future<Map<String, dynamic>> savePassport({
+    required Map<String, dynamic> payload,
+    String? targetEmployeeId,
+  }) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
+    final finalPayload = Map<String, dynamic>.from(payload);
+    final clean = targetEmployeeId?.trim();
+    if (clean != null && clean.isNotEmpty && clean.toLowerCase() != 'me') {
+      finalPayload['employeeID'] = clean;
+    }
+    final res = await _api.savePassport(sessionToken: token, payload: finalPayload);
+    await loadMyDocuments();
+    return res;
+  }
+
+  /// Saves a Residence Card (بطاقة السكن).
+  /// POST /api/documents/residence
+  Future<Map<String, dynamic>> saveResidence({
+    required Map<String, dynamic> payload,
+    String? targetEmployeeId,
+  }) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
+    final finalPayload = Map<String, dynamic>.from(payload);
+    final clean = targetEmployeeId?.trim();
+    if (clean != null && clean.isNotEmpty && clean.toLowerCase() != 'me') {
+      finalPayload['employeeID'] = clean;
+    }
+    final res = await _api.saveResidence(sessionToken: token, payload: finalPayload);
+    await loadMyDocuments();
+    return res;
+  }
+
+  /// Saves a National Card (البطاقة الوطنية الموحدة).
+  /// POST /api/documents/national-card
+  Future<Map<String, dynamic>> saveNationalCard({
+    required Map<String, dynamic> payload,
+    String? targetEmployeeId,
+  }) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) throw const AuthException('جلسة العمل غير صالحة. يرجى تسجيل الدخول مجدداً.');
+    final finalPayload = Map<String, dynamic>.from(payload);
+    final clean = targetEmployeeId?.trim();
+    if (clean != null && clean.isNotEmpty && clean.toLowerCase() != 'me') {
+      finalPayload['employeeID'] = clean;
+    }
+    final res = await _api.saveNationalCard(sessionToken: token, payload: finalPayload);
+    await loadMyDocuments();
+    return res;
+  }
+
+  /// Fetches an authenticated image bytes (e.g. front image, biometric face).
+  Future<Uint8List?> fetchDocumentImage(String relativeOrAbsoluteUrl) async {
+    final token = await _sessions.readAccessToken();
+    if (token == null) return null;
+    return await _api.getAuthenticatedImageBytes(token, relativeOrAbsoluteUrl);
   }
 
   Future<void> signOut() async {

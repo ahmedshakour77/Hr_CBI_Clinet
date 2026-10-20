@@ -18,12 +18,17 @@ class EmployeeProfile {
     this.nationality,
     this.birthDate,
     this.employeeStatus,
+    this.serviceStatus,
     this.hasProfilePhoto = false,
     this.profilePhotoVersion,
     this.email,
+    this.phoneNumber,
+    this.administrativeUnit,
     this.microsoftId,
     this.hasPasskey = false,
     this.signedInWith,
+    this.roles = const [],
+    this.permissions = const [],
     this.rawJson,
   });
 
@@ -163,6 +168,7 @@ class EmployeeProfile {
         'employmentStatus',
         'state',
       ]),
+      serviceStatus: getString(['serviceStatus', 'service_status', 'employmentStatus', 'status']),
       hasProfilePhoto: getBool(['hasProfilePhoto', 'hasPhoto']),
       profilePhotoVersion: getInt(['profilePhotoVersion', 'photoVersion', 'v']),
       email: getString([
@@ -172,9 +178,17 @@ class EmployeeProfile {
         'upn',
         'preferred_username',
       ]),
+      phoneNumber: getString(['phoneNumber', 'phone', 'mobile']),
+      administrativeUnit: getString(['administrativeUnit', 'unit', 'section', 'division']),
       microsoftId: getString(['microsoftId', 'sub', 'oid']),
       hasPasskey: json['hasPasskey'] as bool? ?? false,
       signedInWith: json['signedInWith'] as String?,
+      roles: (json['roles'] is List)
+          ? (json['roles'] as List).map((e) => e.toString()).toList()
+          : (json['role'] != null ? [json['role'].toString()] : const []),
+      permissions: (json['permissions'] is List)
+          ? (json['permissions'] as List).map((e) => e.toString()).toList()
+          : const [],
       rawJson: json,
     );
   }
@@ -196,21 +210,65 @@ class EmployeeProfile {
   final String? nationality;
   final DateTime? birthDate;
   final String? employeeStatus;
+  final String? serviceStatus;
   final bool hasProfilePhoto;
   final int? profilePhotoVersion;
   final String? email;
+  final String? phoneNumber;
+  final String? administrativeUnit;
   final String? microsoftId;
   final bool hasPasskey;
   final String? signedInWith;
+  final List<String> roles;
+  final List<String> permissions;
   final Map<String, dynamic>? rawJson;
 
   /// Compatibility aliases
   String? get fullName => name;
   String? get employeeId => employeeID;
   String? get department => formation;
-  String? get section => firstDepartment;
+  String? get section => administrativeUnit ?? firstDepartment;
   String? get position => positionTitle ?? jobTitle;
-  String? get status => employeeStatus;
+  String? get status => serviceStatus ?? employeeStatus;
+
+  /// True if the employee holds HR administrator privileges
+  bool get isAdmin {
+    if (rawJson != null) {
+      if (rawJson!['isAdmin'] == true ||
+          rawJson!['is_admin'] == true ||
+          rawJson!['isHR'] == true ||
+          rawJson!['is_hr'] == true) {
+        return true;
+      }
+    }
+
+    if (roles.any((r) =>
+        r.toLowerCase().contains('admin') ||
+        r.toLowerCase().contains('hr') ||
+        r.toLowerCase().contains('manager') ||
+        r.toLowerCase().contains('staff'))) {
+      return true;
+    }
+
+    if (permissions.contains('VIEW_ALL_EMPLOYEES') ||
+        permissions.contains('MANAGE_DOCUMENTS') ||
+        permissions.contains('VERIFY_DOCUMENTS')) {
+      return true;
+    }
+
+    final title = (positionTitle ?? jobTitle ?? '').toLowerCase();
+    if (title.contains('admin') ||
+        title.contains('hr') ||
+        title.contains('مدير') ||
+        title.contains('مسؤول') ||
+        title.contains('موارد بشرية') ||
+        title.contains('تقنية المعلومات') ||
+        title.contains('it')) {
+      return true;
+    }
+
+    return false;
+  }
 
   EmployeeProfile copyWith({
     String? employeeID,

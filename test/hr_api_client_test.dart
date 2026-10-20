@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cbi_app/src/api/hr_api_client.dart';
 import 'package:cbi_app/src/auth/auth_exception.dart';
+import 'package:cbi_app/src/id_reader/domain/entities/id_card_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -194,6 +195,116 @@ void main() {
         () => client.deletePasskey(sessionToken: 'valid_token', passkeyId: 'non_existent_key', permanent: true),
         throwsA(isA<AuthException>().having((e) => e.message, 'message', contains('فشل حذف ومحو مفتاح المرور'))),
       );
+    });
+
+    test('updateMyNationalCard sends POST /api/employees/me/national-card', () async {
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, '/api/employees/me/national-card');
+        expect(request.method, 'POST');
+        expect(request.headers['authorization'], 'Bearer test_token');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['documentNumber'], 'A12345678');
+        expect(body['fullNameAr'], 'علي حسن');
+        expect(body['gender'], 'ذكر');
+        expect(body['nationality'], 'عراقي');
+        return http.Response(jsonEncode({'success': true}), 200, headers: {'content-type': 'application/json'});
+      });
+
+      final client = HrApiClient(httpClient: mockClient);
+      const card = IdCardModel(
+        documentNumber: 'A12345678',
+        documentType: 'I',
+        issuingCountry: 'IRQ',
+        nationality: 'IRQ',
+        surname: 'Hassan',
+        givenNames: 'Ali',
+        gender: 'M',
+        fullNameArabic: 'علي حسن',
+      );
+
+      final res = await client.updateMyNationalCard(sessionToken: 'test_token', idCard: card);
+      expect(res['success'], isTrue);
+    });
+
+    test('updateEmployeeNationalCard sends POST /api/employees/{id}/national-card for admin', () async {
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, '/api/employees/1041001/national-card');
+        expect(request.method, 'POST');
+        expect(request.headers['authorization'], 'Bearer admin_token');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['documentNumber'], 'A99887766');
+        return http.Response(jsonEncode({'success': true}), 200, headers: {'content-type': 'application/json'});
+      });
+
+      final client = HrApiClient(httpClient: mockClient);
+      const card = IdCardModel(
+        documentNumber: 'A99887766',
+        documentType: 'I',
+        issuingCountry: 'IRQ',
+        nationality: 'IRQ',
+        surname: 'Salim',
+        givenNames: 'Falah',
+        gender: 'M',
+      );
+
+      final res = await client.updateEmployeeNationalCard(
+        sessionToken: 'admin_token',
+        employeeIdOrNumber: '1041001',
+        idCard: card,
+      );
+      expect(res['success'], isTrue);
+    });
+
+    test('updateEmployeeNationalCard throws AuthException on 403 Forbidden for non-admin', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({'error': 'forbidden', 'message': 'Forbidden'}),
+          403,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final client = HrApiClient(httpClient: mockClient);
+      const card = IdCardModel(
+        documentNumber: 'B11223344',
+        documentType: 'I',
+        issuingCountry: 'IRQ',
+        nationality: 'IRQ',
+        surname: 'Other',
+        givenNames: 'User',
+        gender: 'M',
+      );
+
+      expect(
+        () => client.updateEmployeeNationalCard(
+          sessionToken: 'regular_employee_token',
+          employeeIdOrNumber: '999999',
+          idCard: card,
+        ),
+        throwsA(isA<AuthException>().having((e) => e.message, 'message', contains('403 Forbidden'))),
+      );
+    });
+
+    test('fetchAllEmployees sends GET /api/employees and returns parsed list', () async {
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, '/api/employees');
+        expect(request.headers['authorization'], 'Bearer admin_token');
+        return http.Response(
+          jsonEncode([
+            {'employeeID': '101', 'name': 'أحمد فالح', 'jobTitle': 'مهندس برمجيات'},
+            {'employeeID': '102', 'name': 'سارة كريم', 'jobTitle': 'محاسب رئيسي'},
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final client = HrApiClient(httpClient: mockClient);
+      final employees = await client.fetchAllEmployees('admin_token');
+      expect(employees.length, 2);
+      expect(employees.first.employeeID, '101');
+      expect(employees.first.name, 'أحمد فالح');
+      expect(employees.last.employeeID, '102');
     });
   });
 }

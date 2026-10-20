@@ -26,7 +26,7 @@
 flutter pub get
 
 # تشغيل التطبيق في وضع التطوير مع المتغيرات
-flutter run --dart-define-from-file=env.json
+#flutter run -d 1B011FDF6004CN --dart-define-from-file=env.json
 
 # بناء حزمة أندرويد للإصدار النهائي
 flutter build appbundle --release
