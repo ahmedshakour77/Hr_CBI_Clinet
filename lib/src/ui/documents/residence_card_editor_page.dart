@@ -59,7 +59,8 @@ class _ResidenceCardEditorPageState extends State<ResidenceCardEditorPage> {
     _mahallaCtrl = TextEditingController(text: d?.mahalla ?? '');
     _zuqaqCtrl = TextEditingController(text: d?.zuqaq ?? '');
     _darCtrl = TextEditingController(text: d?.dar ?? '');
-    _housingType = d?.housingType ?? 'ملك';
+    final rawHousing = (d?.housingType ?? '').trim();
+    _housingType = rawHousing.isNotEmpty ? rawHousing : 'دار';
 
     _loadExistingImages();
   }
@@ -415,21 +416,34 @@ class _ResidenceCardEditorPageState extends State<ResidenceCardEditorPage> {
                   ),
                   const SizedBox(height: 14),
 
-                  DropdownButtonFormField<String>(
-                    initialValue: _housingType,
-                    decoration: const InputDecoration(
-                      labelText: 'نوع السكن',
-                      prefixIcon: Icon(Icons.house_outlined),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'ملك', child: Text('ملك')),
-                      DropdownMenuItem(value: 'إيجار', child: Text('إيجار')),
-                      DropdownMenuItem(value: 'مجمع سكني', child: Text('مجمع سكني')),
-                      DropdownMenuItem(value: 'سكن عائلي', child: Text('سكن عائلي')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) setState(() => _housingType = val);
+                  Builder(
+                    builder: (context) {
+                      final availableHousingTypes = <String>[
+                        'دار',
+                        'شقة',
+                        'ملك',
+                        'إيجار',
+                        'مجمع سكني',
+                        'سكن عائلي',
+                      ];
+                      if (_housingType.isNotEmpty && !availableHousingTypes.contains(_housingType)) {
+                        availableHousingTypes.insert(0, _housingType);
+                      }
+
+                      return DropdownButtonFormField<String>(
+                        initialValue: _housingType,
+                        decoration: const InputDecoration(
+                          labelText: 'نوع السكن',
+                          prefixIcon: Icon(Icons.house_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+                        ),
+                        items: availableHousingTypes
+                            .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => _housingType = val);
+                        },
+                      );
                     },
                   ),
                   const SizedBox(height: 32),

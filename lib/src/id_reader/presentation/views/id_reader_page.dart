@@ -74,7 +74,12 @@ class _IdReaderPageState extends State<IdReaderPage> {
         _isCameraInitialized = true;
       });
 
-      _controller.startScanning(scanFrontFirst: true);
+      _controller.startScanning(
+        scanFrontFirst: _controller.selectedMode == DocumentTypeMode.nationalId,
+      );
+      if (_controller.selectedMode != DocumentTypeMode.nationalId) {
+        _startImageStream();
+      }
     } catch (e) {
       debugPrint('Camera initialization error: $e');
     }
@@ -286,7 +291,12 @@ class _IdReaderPageState extends State<IdReaderPage> {
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              _controller.startScanning(scanFrontFirst: true);
+              _controller.startScanning(
+                scanFrontFirst: _controller.selectedMode == DocumentTypeMode.nationalId,
+              );
+              if (_controller.selectedMode != DocumentTypeMode.nationalId) {
+                _startImageStream();
+              }
             },
             child: const Text('إعادة المحاولة'),
           ),
@@ -352,6 +362,8 @@ class _IdReaderPageState extends State<IdReaderPage> {
                   _controller.setDocumentMode(mode);
                   if (mode != DocumentTypeMode.nationalId) {
                     _startImageStream();
+                  } else {
+                    _stopImageStream();
                   }
                 },
               ),

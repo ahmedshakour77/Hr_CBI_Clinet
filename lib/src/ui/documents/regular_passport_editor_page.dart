@@ -60,7 +60,16 @@ class _RegularPassportEditorPageState extends State<RegularPassportEditorPage> {
     _issueDateCtrl = TextEditingController(text: d?.issueDate ?? '');
     _expiryDateCtrl = TextEditingController(text: d?.expiryDate ?? '');
     _rawMrzCtrl = TextEditingController(text: d?.rawMrz ?? '');
-    _gender = d?.gender ?? 'ذكر';
+    final rawGender = (d?.gender ?? '').trim();
+    if (rawGender == 'M' || rawGender == 'Male' || rawGender == 'MALE' || rawGender == 'ذكر') {
+      _gender = 'ذكر';
+    } else if (rawGender == 'F' || rawGender == 'Female' || rawGender == 'FEMALE' || rawGender == 'أنثى') {
+      _gender = 'أنثى';
+    } else if (rawGender.isNotEmpty) {
+      _gender = rawGender;
+    } else {
+      _gender = 'ذكر';
+    }
     _passportType = d?.passportType ?? 'عادي (P)';
 
     _loadExistingImages();
@@ -384,18 +393,25 @@ class _RegularPassportEditorPageState extends State<RegularPassportEditorPage> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _gender,
-                          decoration: const InputDecoration(
-                            labelText: 'الجنس',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'ذكر', child: Text('ذكر')),
-                            DropdownMenuItem(value: 'أنثى', child: Text('أنثى')),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setState(() => _gender = val);
+                        child: Builder(
+                          builder: (context) {
+                            final availableGenders = <String>['ذكر', 'أنثى'];
+                            if (_gender.isNotEmpty && !availableGenders.contains(_gender)) {
+                              availableGenders.add(_gender);
+                            }
+                            return DropdownButtonFormField<String>(
+                              initialValue: _gender,
+                              decoration: const InputDecoration(
+                                labelText: 'الجنس',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+                              ),
+                              items: availableGenders
+                                  .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) setState(() => _gender = val);
+                              },
+                            );
                           },
                         ),
                       ),
