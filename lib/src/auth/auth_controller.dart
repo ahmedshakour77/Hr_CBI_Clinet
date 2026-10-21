@@ -13,13 +13,11 @@ import 'passkey_sign_in.dart';
 import 'session_store.dart';
 
 enum AuthStatus {
-  /// Still deciding whether a stored session is usable.
   restoring,
   signedOut,
   signedIn,
 }
 
-/// Single source of truth for authentication state, user profile, and passkey management.
 class AuthController extends ChangeNotifier {
   AuthController({
     HrApiClient? api,
@@ -66,25 +64,16 @@ class AuthController extends ChangeNotifier {
   SessionStore get sessions => _sessions;
   Future<String?> getAccessToken() => _sessions.readAccessToken();
 
-  /// Whether current signed-in employee has Admin / HR rights
   bool get isAdmin => _profile?.isAdmin ?? false;
 
-  /// True immediately after an interactive Microsoft login (used to prompt automatic Passkey setup).
   bool get justSignedIn => _justSignedIn;
   void clearJustSignedIn() => _justSignedIn = false;
 
-  /// Non-null when the last action failed for a reason worth showing.
   String? get errorMessage => _errorMessage;
-
-  /// True while a sign-in or action is in flight.
   bool get busy => _busy;
-
   bool get microsoftAvailable => MicrosoftSignIn.isSupported;
-
-  /// Get the last remembered employee ID on this device.
   Future<String?> getLastEmployeeId() => _sessions.readLastEmployeeId();
 
-  /// Reattaches to a stored session on launch, checking `/api/employees/me`.
   Future<void> restore() async {
     debugPrint('[AUTH_CONTROLLER] Restoring session from local storage...');
     final token = await _sessions.readAccessToken();
@@ -97,7 +86,7 @@ class AuthController extends ChangeNotifier {
         _profile = profile.copyWith(
           microsoftId: profile.microsoftId ?? payload['sub']?.toString(),
           email: profile.email ?? (payload['preferred_username'] ?? payload['email'])?.toString(),
-          signedInWith: 'microsoft',
+          signedInWith: idToken != null ? 'microsoft' : 'passkey',
         );
         debugPrint('[AUTH_CONTROLLER] Stored session restored for: ${_profile?.fullName}');
         if (_profile?.employeeID != null) {
@@ -113,10 +102,10 @@ class AuthController extends ChangeNotifier {
       }
     }
 
-    final refreshToken = await _sessions.readRefreshToken();
-    if (refreshToken != null && MicrosoftSignIn.isSupported) {
+    final microsoftRefreshToken = await _sessions.readMicrosoftRefreshToken();
+    if (microsoftRefreshToken != null && MicrosoftSignIn.isSupported) {
       debugPrint('[AUTH_CONTROLLER] Attempting silent Microsoft refresh...');
-      final idToken = await _microsoft.refresh(refreshToken);
+      final idToken = await _microsoft.refresh(microsoftRefreshToken);
       if (idToken != null) {
         try {
           final payload = _decodeJwt(idToken);
@@ -133,7 +122,8 @@ class AuthController extends ChangeNotifier {
           );
           await _sessions.saveSession(
             accessToken: serverAuth.accessToken,
-            refreshToken: serverAuth.refreshToken ?? refreshToken,
+            microsoftRefreshToken: microsoftRefreshToken,
+            backendRefreshToken: serverAuth.refreshToken,
             idToken: idToken,
             employeeId: _profile?.employeeID,
           );
@@ -153,7 +143,6 @@ class AuthController extends ChangeNotifier {
     _set(status: AuthStatus.signedOut);
   }
 
-  /// Refreshes the current employee profile, photo, and passkeys without re-authenticating.
   Future<void> refreshProfile() async {
     final token = await _sessions.readAccessToken();
     if (token == null) return;
@@ -176,11 +165,9 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Interactive Microsoft login flow -> Token Exchange -> Employee Profile verification.
   Future<void> signInWithMicrosoft() => _guard(() async {
     final tokens = await _microsoft.signIn();
 
-    // 1. Decode JWT payload to extract user email
     final payload = _decodeJwt(tokens.idToken);
     final email = (payload['preferred_username'] ?? payload['email'] ?? payload['upn'])?.toString();
     debugPrint('==================================================');
@@ -188,11 +175,9 @@ class AuthController extends ChangeNotifier {
     debugPrint('Email extracted: $email');
     debugPrint('==================================================');
 
-    // 2. Collect Device Info
     final deviceInfo = await DeviceInfoService.getDeviceInfo();
     debugPrint('[AUTH_CONTROLLER] Device Info: $deviceInfo');
 
-    // 3. Authenticate with backend API: POST /api/auth/microsoft-login
     debugPrint('[AUTH_CONTROLLER] Calling POST /api/auth/microsoft-login ...');
     final serverAuth = await _api.exchangeMicrosoftIdToken(
       idToken: tokens.idToken,
@@ -201,7 +186,6 @@ class AuthController extends ChangeNotifier {
     );
     debugPrint('[AUTH_CONTROLLER] API Token Exchange successful!');
 
-    // 4. Fetch Employee Profile: GET /api/employees/me
     debugPrint('[AUTH_CONTROLLER] Calling GET /api/employees/me ...');
     try {
       final remoteProfile = await _api.fetchProfile(serverAuth.accessToken);
@@ -214,27 +198,23 @@ class AuthController extends ChangeNotifier {
     } catch (e) {
       debugPrint('[AUTH_CONTROLLER] Failed to load employee profile: $e');
       await _sessions.clear();
-      if (e is AuthException) {
-        rethrow;
-      }
+      if (e is AuthException) rethrow;
       throw AuthException(
         'عذراً، هذا الحساب غير مربوط بملف موظف في النظام. يرجى مراجعة إدارة الموارد البشرية.',
         cause: e,
       );
     }
 
-    // 5. Load profile photo if available
     _loadPhotoIfAvailable(serverAuth.accessToken, _profile!);
 
-    // 6. Persist Session upon complete success (and remember employeeID)
     await _sessions.saveSession(
       accessToken: serverAuth.accessToken,
-      refreshToken: serverAuth.refreshToken ?? tokens.refreshToken,
+      microsoftRefreshToken: tokens.refreshToken,
+      backendRefreshToken: serverAuth.refreshToken,
       idToken: tokens.idToken,
       employeeId: _profile?.employeeID,
     );
 
-    // 7. Load passkeys list & mark just signed in
     await loadMyPasskeys();
     _justSignedIn = true;
     _set(status: AuthStatus.signedIn);
@@ -258,7 +238,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Interactive Passkey (Biometric) Login flow.
   Future<void> signInWithPasskey({String? employeeID}) => _guard(() async {
     var empId = employeeID?.trim();
     if (empId == null || empId.isEmpty) {
@@ -283,8 +262,9 @@ class AuthController extends ChangeNotifier {
 
       await _sessions.saveSession(
         accessToken: serverAuth.accessToken,
-        refreshToken: serverAuth.refreshToken,
+        backendRefreshToken: serverAuth.refreshToken,
         employeeId: profile.employeeID ?? empId,
+        clearMicrosoftTokens: true,
       );
 
       _loadPhotoIfAvailable(serverAuth.accessToken, _profile!);
@@ -296,7 +276,6 @@ class AuthController extends ChangeNotifier {
     }
   });
 
-  /// Enrolls a passkey on the current device automatically with zero manual input.
   Future<void> addPasskey() => _guard(() async {
     final token = await _sessions.readAccessToken();
     if (token == null) {
@@ -318,7 +297,6 @@ class AuthController extends ChangeNotifier {
 
     final updatedProfile = await _api.fetchProfile(token);
     _profile = updatedProfile.copyWith(
-      hasPasskey: true,
       signedInWith: _profile?.signedInWith,
     );
 
@@ -326,7 +304,18 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   });
 
-  /// Fetches the registered passkeys for the current user.
+  bool _isPasskeyActive(Map<String, dynamic> passkey) {
+    final status = passkey['status']?.toString().trim().toLowerCase();
+    return passkey['isActive'] != false &&
+        passkey['isBlocked'] != true &&
+        passkey['isFrozen'] != true &&
+        status != 'inactive' &&
+        status != 'frozen' &&
+        status != 'blocked' &&
+        status != 'disabled' &&
+        status != 'revoked';
+  }
+
   Future<void> loadMyPasskeys() async {
     final token = await _sessions.readAccessToken();
     if (token == null) return;
@@ -334,8 +323,9 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
     try {
       _myPasskeys = await _api.getMyPasskeys(token);
-      if (_myPasskeys.isNotEmpty && _profile != null && !_profile!.hasPasskey) {
-        _profile = _profile!.copyWith(hasPasskey: true);
+      final hasActivePasskey = _myPasskeys.any(_isPasskeyActive);
+      if (_profile != null && _profile!.hasPasskey != hasActivePasskey) {
+        _profile = _profile!.copyWith(hasPasskey: hasActivePasskey);
       }
     } catch (e) {
       debugPrint('[AUTH_CONTROLLER] Error loading passkeys list: $e');
@@ -345,9 +335,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Deletes or freezes a passkey by ID.
-  /// If [permanent] is true, it permanently deletes the passkey from the server DB.
-  /// Otherwise, it freezes / deactivates it without wiping.
   Future<void> deletePasskey(dynamic passkeyId, {bool permanent = false}) => _guard(() async {
     final token = await _sessions.readAccessToken();
     if (token == null) return;
@@ -357,13 +344,9 @@ class AuthController extends ChangeNotifier {
       permanent: permanent,
     );
     await loadMyPasskeys();
-    if (_myPasskeys.isEmpty && _profile != null) {
-      _profile = _profile!.copyWith(hasPasskey: false);
-    }
     notifyListeners();
   });
 
-  /// Fetches dynamic services catalog tailored to the logged-in employee.
   Future<void> loadDynamicServices() async {
     final token = await _sessions.readAccessToken();
     if (token == null) return;
@@ -379,7 +362,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// HR Admin: Fetches directory of all employees across all pages.
   Future<List<EmployeeProfile>> fetchAllEmployees({
     void Function(int loadedCount, int? totalCount)? onProgress,
   }) async {
@@ -390,7 +372,6 @@ class AuthController extends ChangeNotifier {
     return await _api.fetchAllEmployees(token, onProgress: onProgress);
   }
 
-  /// Fetches single employee details.
   Future<EmployeeProfile> fetchEmployeeDetails(String idOrNumber) async {
     final token = await _sessions.readAccessToken();
     if (token == null) {
@@ -399,10 +380,6 @@ class AuthController extends ChangeNotifier {
     return await _api.fetchEmployeeDetails(token, idOrNumber);
   }
 
-  /// Synchronizes National Card details and photos to the backend.
-  /// If [targetEmployeeId] is null or 'me', calls `POST /api/employees/me/national-card`.
-  /// If [targetEmployeeId] is specified, calls `POST /api/employees/{idOrNumber}/national-card`.
-  /// (Server automatically blocks non-admin callers with 403 Forbidden).
   Future<Map<String, dynamic>> updateNationalCard({
     required IdCardModel idCard,
     String? targetEmployeeId,
@@ -417,7 +394,6 @@ class AuthController extends ChangeNotifier {
         : null;
 
     if (idCard.isPassport) {
-      // Passport endpoint: POST /api/documents/passport
       try {
         final payload = idCard.toPassportApiPayload(employeeId: effectiveEmpId);
         final res = await _api.savePassport(sessionToken: token, payload: payload);
@@ -429,16 +405,14 @@ class AuthController extends ChangeNotifier {
           final res = await _api.updateMyNationalCard(sessionToken: token, idCard: idCard);
           await loadMyDocuments();
           return res;
-        } else {
-          return await _api.updateEmployeeNationalCard(
-            sessionToken: token,
-            employeeIdOrNumber: effectiveEmpId,
-            idCard: idCard,
-          );
         }
+        return await _api.updateEmployeeNationalCard(
+          sessionToken: token,
+          employeeIdOrNumber: effectiveEmpId,
+          idCard: idCard,
+        );
       }
     } else {
-      // National Card endpoint: POST /api/documents/national-card
       try {
         final payload = idCard.toNationalCardApiPayload(employeeId: effectiveEmpId);
         final res = await _api.saveNationalCard(sessionToken: token, payload: payload);
@@ -450,18 +424,16 @@ class AuthController extends ChangeNotifier {
           final res = await _api.updateMyNationalCard(sessionToken: token, idCard: idCard);
           await loadMyDocuments();
           return res;
-        } else {
-          return await _api.updateEmployeeNationalCard(
-            sessionToken: token,
-            employeeIdOrNumber: effectiveEmpId,
-            idCard: idCard,
-          );
         }
+        return await _api.updateEmployeeNationalCard(
+          sessionToken: token,
+          employeeIdOrNumber: effectiveEmpId,
+          idCard: idCard,
+        );
       }
     }
   }
 
-  /// Fetches the current employee's documents from `/api/documents/me`.
   Future<void> loadMyDocuments() async {
     final token = await _sessions.readAccessToken();
     if (token == null) return;
@@ -477,7 +449,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Admin: Fetches official documents for a specified employee.
   Future<EmployeeDocumentsBundle?> fetchEmployeeDocuments(String employeeId) async {
     final token = await _sessions.readAccessToken();
     if (token == null) return null;
@@ -489,8 +460,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Saves a Passport (Electronic or Regular).
-  /// POST /api/documents/passport
   Future<Map<String, dynamic>> savePassport({
     required Map<String, dynamic> payload,
     String? targetEmployeeId,
@@ -507,8 +476,6 @@ class AuthController extends ChangeNotifier {
     return res;
   }
 
-  /// Saves a Residence Card (بطاقة السكن).
-  /// POST /api/documents/residence
   Future<Map<String, dynamic>> saveResidence({
     required Map<String, dynamic> payload,
     String? targetEmployeeId,
@@ -525,8 +492,6 @@ class AuthController extends ChangeNotifier {
     return res;
   }
 
-  /// Saves a National Card (البطاقة الوطنية الموحدة).
-  /// POST /api/documents/national-card
   Future<Map<String, dynamic>> saveNationalCard({
     required Map<String, dynamic> payload,
     String? targetEmployeeId,
@@ -543,7 +508,6 @@ class AuthController extends ChangeNotifier {
     return res;
   }
 
-  /// Fetches an authenticated image bytes (e.g. front image, biometric face).
   Future<Uint8List?> fetchDocumentImage(String relativeOrAbsoluteUrl) async {
     final token = await _sessions.readAccessToken();
     if (token == null) return null;
@@ -558,14 +522,10 @@ class AuthController extends ChangeNotifier {
     _myPasskeys = [];
     _justSignedIn = false;
     _set(status: AuthStatus.signedOut);
-
-    // Best-effort Microsoft sign-out
     await _microsoft.signOut(idToken);
   }
 
   void clearError() => _set(error: null);
-
-  // ---------------------------------------------------------------------
 
   Map<String, dynamic> _decodeJwt(String token) {
     try {
@@ -580,7 +540,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Runs an action with busy state and uniform error handling.
   Future<void> _guard(Future<void> Function() action) async {
     if (_busy) return;
     _set(busy: true, error: null);
