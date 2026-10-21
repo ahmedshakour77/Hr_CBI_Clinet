@@ -75,22 +75,57 @@ void main() {
     test('returns null when storage is initially empty', () async {
       expect(await sessionStore.readAccessToken(), isNull);
       expect(await sessionStore.readRefreshToken(), isNull);
+      expect(await sessionStore.readMicrosoftRefreshToken(), isNull);
+      expect(await sessionStore.readBackendRefreshToken(), isNull);
       expect(await sessionStore.readIdToken(), isNull);
       expect(await sessionStore.readLastEmployeeId(), isNull);
     });
 
-    test('saveSession correctly writes all token fields', () async {
+    test('saveSession keeps Microsoft and backend refresh tokens separate', () async {
       await sessionStore.saveSession(
         accessToken: 'test_access_token_123',
-        refreshToken: 'test_refresh_token_456',
+        microsoftRefreshToken: 'microsoft_refresh_456',
+        backendRefreshToken: 'backend_refresh_999',
         idToken: 'test_id_token_789',
         employeeId: 'EMP-001',
       );
 
       expect(await sessionStore.readAccessToken(), 'test_access_token_123');
-      expect(await sessionStore.readRefreshToken(), 'test_refresh_token_456');
+      expect(await sessionStore.readMicrosoftRefreshToken(), 'microsoft_refresh_456');
+      expect(await sessionStore.readRefreshToken(), 'microsoft_refresh_456');
+      expect(await sessionStore.readBackendRefreshToken(), 'backend_refresh_999');
       expect(await sessionStore.readIdToken(), 'test_id_token_789');
       expect(await sessionStore.readLastEmployeeId(), 'EMP-001');
+    });
+
+    test('legacy refreshToken parameter remains Microsoft-token compatible', () async {
+      await sessionStore.saveSession(
+        accessToken: 'access',
+        refreshToken: 'legacy_ms_refresh',
+        idToken: 'id_token',
+      );
+      expect(await sessionStore.readMicrosoftRefreshToken(), 'legacy_ms_refresh');
+    });
+
+    test('passkey session clears stale Microsoft tokens but keeps backend refresh', () async {
+      await sessionStore.saveSession(
+        accessToken: 'ms_access',
+        microsoftRefreshToken: 'ms_refresh',
+        idToken: 'ms_id',
+        employeeId: 'EMP-1',
+      );
+
+      await sessionStore.saveSession(
+        accessToken: 'passkey_access',
+        backendRefreshToken: 'backend_refresh',
+        employeeId: 'EMP-1',
+        clearMicrosoftTokens: true,
+      );
+
+      expect(await sessionStore.readAccessToken(), 'passkey_access');
+      expect(await sessionStore.readMicrosoftRefreshToken(), isNull);
+      expect(await sessionStore.readIdToken(), isNull);
+      expect(await sessionStore.readBackendRefreshToken(), 'backend_refresh');
     });
 
     test('saveLastEmployeeId persists employee ID independently', () async {
@@ -98,10 +133,11 @@ void main() {
       expect(await sessionStore.readLastEmployeeId(), 'EMP-999');
     });
 
-    test('clear wipes access, refresh, and id tokens', () async {
+    test('clear wipes all tokens and retains last employee ID', () async {
       await sessionStore.saveSession(
         accessToken: 'access_to_delete',
-        refreshToken: 'refresh_to_delete',
+        microsoftRefreshToken: 'ms_refresh_to_delete',
+        backendRefreshToken: 'backend_refresh_to_delete',
         idToken: 'id_to_delete',
         employeeId: 'EMP-KEEP',
       );
@@ -109,9 +145,9 @@ void main() {
       await sessionStore.clear();
 
       expect(await sessionStore.readAccessToken(), isNull);
-      expect(await sessionStore.readRefreshToken(), isNull);
+      expect(await sessionStore.readMicrosoftRefreshToken(), isNull);
+      expect(await sessionStore.readBackendRefreshToken(), isNull);
       expect(await sessionStore.readIdToken(), isNull);
-      // Last employee ID is intentionally retained for quick passkey login
       expect(await sessionStore.readLastEmployeeId(), 'EMP-KEEP');
     });
   });
