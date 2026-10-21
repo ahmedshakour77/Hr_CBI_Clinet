@@ -231,7 +231,8 @@ class EmployeeProfile {
   String? get position => positionTitle ?? jobTitle;
   String? get status => serviceStatus ?? employeeStatus;
 
-  /// True if the employee holds HR administrator privileges
+  /// True only when the backend explicitly grants an administrative role,
+  /// permission, or trusted admin flag. Job titles are deliberately ignored.
   bool get isAdmin {
     if (rawJson != null) {
       if (rawJson!['isAdmin'] == true ||
@@ -242,32 +243,27 @@ class EmployeeProfile {
       }
     }
 
-    if (roles.any((r) =>
-        r.toLowerCase().contains('admin') ||
-        r.toLowerCase().contains('hr') ||
-        r.toLowerCase().contains('manager') ||
-        r.toLowerCase().contains('staff'))) {
-      return true;
-    }
+    final normalizedRoles = roles.map((r) => r.trim().toLowerCase()).toSet();
+    const privilegedRoles = {
+      'admin',
+      'administrator',
+      'hr',
+      'hr_admin',
+      'hr-admin',
+      'human_resources',
+      'human-resources',
+    };
+    if (normalizedRoles.any(privilegedRoles.contains)) return true;
 
-    if (permissions.contains('VIEW_ALL_EMPLOYEES') ||
-        permissions.contains('MANAGE_DOCUMENTS') ||
-        permissions.contains('VERIFY_DOCUMENTS')) {
-      return true;
-    }
-
-    final title = (positionTitle ?? jobTitle ?? '').toLowerCase();
-    if (title.contains('admin') ||
-        title.contains('hr') ||
-        title.contains('مدير') ||
-        title.contains('مسؤول') ||
-        title.contains('موارد بشرية') ||
-        title.contains('تقنية المعلومات') ||
-        title.contains('it')) {
-      return true;
-    }
-
-    return false;
+    final normalizedPermissions = permissions.map((p) => p.trim().toUpperCase()).toSet();
+    const privilegedPermissions = {
+      'VIEW_ALL_EMPLOYEES',
+      'MANAGE_DOCUMENTS',
+      'VERIFY_DOCUMENTS',
+      'MANAGE_EMPLOYEES',
+      'HR_ADMIN',
+    };
+    return normalizedPermissions.any(privilegedPermissions.contains);
   }
 
   EmployeeProfile copyWith({
@@ -288,12 +284,17 @@ class EmployeeProfile {
     String? nationality,
     DateTime? birthDate,
     String? employeeStatus,
+    String? serviceStatus,
     bool? hasProfilePhoto,
     int? profilePhotoVersion,
     String? email,
+    String? phoneNumber,
+    String? administrativeUnit,
     String? microsoftId,
     bool? hasPasskey,
     String? signedInWith,
+    List<String>? roles,
+    List<String>? permissions,
     Map<String, dynamic>? rawJson,
   }) {
     return EmployeeProfile(
@@ -314,12 +315,17 @@ class EmployeeProfile {
       nationality: nationality ?? this.nationality,
       birthDate: birthDate ?? this.birthDate,
       employeeStatus: employeeStatus ?? this.employeeStatus,
+      serviceStatus: serviceStatus ?? this.serviceStatus,
       hasProfilePhoto: hasProfilePhoto ?? this.hasProfilePhoto,
       profilePhotoVersion: profilePhotoVersion ?? this.profilePhotoVersion,
       email: email ?? this.email,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      administrativeUnit: administrativeUnit ?? this.administrativeUnit,
       microsoftId: microsoftId ?? this.microsoftId,
       hasPasskey: hasPasskey ?? this.hasPasskey,
       signedInWith: signedInWith ?? this.signedInWith,
+      roles: roles ?? this.roles,
+      permissions: permissions ?? this.permissions,
       rawJson: rawJson ?? this.rawJson,
     );
   }
