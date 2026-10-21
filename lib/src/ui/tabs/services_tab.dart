@@ -4,7 +4,8 @@ import '../../auth/auth_controller.dart';
 import '../../id_reader/id_reader.dart';
 import '../admin/admin_employees_directory_page.dart';
 
-/// The Self-Services tab offering dynamic API-driven and standard HR requests for CBI employees.
+/// The Self-Services tab offering API-driven and planned HR requests.
+/// Planned services never display fabricated employee values or fake success.
 class ServicesTab extends StatefulWidget {
   const ServicesTab({super.key, required this.auth});
 
@@ -30,9 +31,7 @@ class _ServicesTabState extends State<ServicesTab> {
     final dynamicServices = auth.dynamicServices;
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await auth.loadDynamicServices();
-      },
+      onRefresh: auth.loadDynamicServices,
       color: colors.primary,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(
@@ -45,15 +44,11 @@ class _ServicesTabState extends State<ServicesTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Welcome Banner
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        colors.primary,
-                        const Color(0xFF0284C7),
-                      ],
+                      colors: [colors.primary, const Color(0xFF0284C7)],
                     ),
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
@@ -103,7 +98,7 @@ class _ServicesTabState extends State<ServicesTab> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'مرحباً ${profile?.name ?? "زميلنا العزيز"}، يمكنك تقديم ومتابعة جميع طلباتك الإدارية والمالية المتاحة لحسابك مباشرة.',
+                        'مرحباً ${profile?.name ?? "زميلنا العزيز"}، تظهر الخدمات المرتبطة فعلياً بحسابك أولاً. الخدمات الأخرى موضحة كخدمات قيد الربط ولا تعرض بيانات غير حقيقية.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.9),
                           height: 1.5,
@@ -114,20 +109,18 @@ class _ServicesTabState extends State<ServicesTab> {
                 ),
                 const SizedBox(height: 24),
 
-                // If Dynamic Services are returned from API, render them first
                 if (dynamicServices.isNotEmpty) ...[
                   const _CategoryHeader(
                     title: 'الخدمات المخصصة لحسابك',
                     icon: Icons.stars_rounded,
-                    badge: 'خاص بحسابك',
+                    badge: 'مرتبطة بالنظام',
                   ),
                   const SizedBox(height: 12),
                   _ServiceGrid(
                     items: dynamicServices.map((svc) {
                       final title = svc['title'] ?? svc['name'] ?? svc['serviceName'] ?? 'خدمة موظف';
                       final subtitle = svc['subtitle'] ?? svc['description'] ?? svc['category'] ?? '';
-                      final description = svc['details'] ?? svc['description'] ?? 'تقديم طلب للخدمة مباشرة';
-
+                      final description = svc['details'] ?? svc['description'] ?? 'الخدمة متاحة من خلال النظام.';
                       return _ServiceItem(
                         title: title.toString(),
                         subtitle: subtitle.toString(),
@@ -137,6 +130,7 @@ class _ServicesTabState extends State<ServicesTab> {
                           context,
                           title: title.toString(),
                           description: description.toString(),
+                          isConnected: true,
                         ),
                       );
                     }).toList(),
@@ -144,11 +138,10 @@ class _ServicesTabState extends State<ServicesTab> {
                   const SizedBox(height: 26),
                 ],
 
-                // Category 1: الإجازات والغيابات
                 const _CategoryHeader(
                   title: 'الإجازات والدوام',
                   icon: Icons.calendar_month_outlined,
-                  badge: '3 خدمات',
+                  badge: 'قيد الربط',
                 ),
                 const SizedBox(height: 12),
                 _ServiceGrid(
@@ -158,21 +151,21 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'اعتيادية، مرضية، دراسية',
                       icon: Icons.add_circle_outline_rounded,
                       color: const Color(0xFF10B981),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
-                        title: 'طلب إجازة اعتيادية',
-                        description: 'تقديم طلب إجازة رسمي إلى مدير الشعبة للمصادقة.',
+                        title: 'طلب إجازة جديدة',
+                        description: 'سيتم تفعيل تقديم طلب الإجازة بعد ربط واجهة الخدمة مع نظام الموارد البشرية وسير الموافقات.',
                       ),
                     ),
                     _ServiceItem(
                       title: 'رصيد الإجازات',
-                      subtitle: 'استعراض الرصيد المتبقي',
+                      subtitle: 'استعراض الرصيد الفعلي من النظام',
                       icon: Icons.pie_chart_outline_rounded,
                       color: const Color(0xFF0284C7),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
-                        title: 'رصيد الإجازات المتبقي',
-                        description: 'الرصيد الاعتيادي المتبقي: 36 يوماً\nالرصيد الزمني: 12 ساعة',
+                        title: 'رصيد الإجازات',
+                        description: 'لا يعرض التطبيق رصيداً افتراضياً. سيظهر الرصيد الفعلي فقط بعد ربط خدمة أرصدة الإجازات بالـ API.',
                       ),
                     ),
                     _ServiceItem(
@@ -180,21 +173,20 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'سجل البصمات اليومي',
                       icon: Icons.fingerprint_rounded,
                       color: const Color(0xFF8B5CF6),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
-                        title: 'سجل الحضور اليومي',
-                        description: 'استعراض حركة البصمة لأيام الدوام الرسمي خلال الشهر الحالي.',
+                        title: 'سجل الحضور والبصمة',
+                        description: 'هذه الخدمة قيد الربط مع مصدر بيانات الحضور والبصمة، ولن يتم عرض سجل تجريبي بدلاً عن البيانات الفعلية.',
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
 
-                // Category 2: الرواتب والمستحقات
                 const _CategoryHeader(
                   title: 'الرواتب والمستحقات المالية',
                   icon: Icons.account_balance_wallet_outlined,
-                  badge: '2 خدمات',
+                  badge: 'قيد الربط',
                 ),
                 const SizedBox(height: 12),
                 _ServiceGrid(
@@ -204,10 +196,10 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'الراتب الاسمي والمخصصات',
                       icon: Icons.receipt_long_rounded,
                       color: const Color(0xFFF59E0B),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
                         title: 'كشف الراتب الشهري',
-                        description: 'تحميل كشف الراتب للشهر الحالي وتفاصيل الاستقطاعات والمخصصات المصرفية.',
+                        description: 'سيتم إظهار كشف الراتب بعد ربط الخدمة المالية والتحقق من صلاحيات الوصول للبيانات الحساسة.',
                       ),
                     ),
                     _ServiceItem(
@@ -215,21 +207,20 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'تقديم ومتابعة الأقساط',
                       icon: Icons.monetization_on_outlined,
                       color: const Color(0xFFEC4899),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
                         title: 'السلف والقروض',
-                        description: 'طلب سلفة جديدة أو استعراض جدول استقطاع الأقساط الشهرية.',
+                        description: 'الخدمة قيد الربط مع النظام المالي ولا توجد حالياً عملية تقديم أو متابعة منفذة من هذه الشاشة.',
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
 
-                // Category 3: الكتب والشهادات الرسمية
                 const _CategoryHeader(
                   title: 'الكتب والشهادات الرسمية',
                   icon: Icons.description_outlined,
-                  badge: '3 خدمات',
+                  badge: 'قيد الربط',
                 ),
                 const SizedBox(height: 12),
                 _ServiceGrid(
@@ -239,10 +230,10 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'لمن يهمه الأمر',
                       icon: Icons.verified_outlined,
                       color: const Color(0xFF0F62FE),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
-                        title: 'طلب كتاب تأييد استمرار بالخدمة',
-                        description: 'إصدار كتاب تأييد رسمي مع كود QR للتحقق الإلكتروني.',
+                        title: 'كتاب تأييد استمرار بالخدمة',
+                        description: 'إصدار الكتاب سيُفعّل بعد ربط مسار الطلب والموافقة والتوقيع والتحقق الإلكتروني.',
                       ),
                     ),
                     _ServiceItem(
@@ -250,10 +241,10 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'موجهة للدوائر الرسمية',
                       icon: Icons.request_quote_outlined,
                       color: const Color(0xFF059669),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
-                        title: 'طلب شهادة راتب',
-                        description: 'إصدار شهادة راتب معتمدة موجهة إلى الجهات الحكومية أو المصرفية.',
+                        title: 'شهادة راتب',
+                        description: 'الخدمة قيد الربط ولن يتم إنشاء شهادة أو إظهار نجاح قبل تنفيذ الـ API ومسار الاعتماد الفعلي.',
                       ),
                     ),
                     _ServiceItem(
@@ -261,21 +252,20 @@ class _ServicesTabState extends State<ServicesTab> {
                       subtitle: 'سجل التشكرات والقدم',
                       icon: Icons.military_tech_outlined,
                       color: const Color(0xFFD97706),
-                      onTap: () => _showServiceModal(
+                      onTap: () => _showPlannedService(
                         context,
-                        title: 'سجل كتب الشكر والتقدير',
-                        description: 'عرض كتب الشكر والتقدير الوزارية والإدارية واحتساب القدم الوظيفي.',
+                        title: 'كتب الشكر والتقدير',
+                        description: 'سيظهر السجل الفعلي واحتساب القدم بعد ربط الخدمة ببيانات الموارد البشرية.',
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
 
-                // Category 4: الهوية والتحقق الرقمي
                 _CategoryHeader(
                   title: 'الهوية والتحقق الرقمي',
                   icon: Icons.fingerprint_rounded,
-                  badge: auth.isAdmin ? 'صلاحيات HR' : 'NFC الذكي',
+                  badge: auth.isAdmin ? 'صلاحيات HR' : 'NFC تجريبي',
                 ),
                 const SizedBox(height: 12),
                 _ServiceGrid(
@@ -283,7 +273,7 @@ class _ServicesTabState extends State<ServicesTab> {
                     if (auth.isAdmin)
                       _ServiceItem(
                         title: 'إدارة وتحديث بطاقات الموظفين (HR Admin)',
-                        subtitle: 'استعراض جميع الموظفين، التدقيق، وتحديث الشريحة عبر NFC',
+                        subtitle: 'استعراض الموظفين وتحديث بيانات المستمسكات حسب صلاحيات الخادم',
                         icon: Icons.admin_panel_settings_rounded,
                         color: const Color(0xFF0F62FE),
                         onTap: () {
@@ -295,10 +285,8 @@ class _ServicesTabState extends State<ServicesTab> {
                         },
                       ),
                     _ServiceItem(
-                      title: auth.isAdmin ? 'قارئ بطاقتي أنا (كأدمن)' : 'قارئ البطاقة الموحدة والجواز',
-                      subtitle: auth.isAdmin
-                          ? 'تحديث بطاقتك الشخصية كمسؤول عبر المسار المباشر me'
-                          : 'قراءة وتدقيق الشريحة عبر NFC وتحديث بطاقتك الشخصية',
+                      title: auth.isAdmin ? 'قارئ مستمسكي الشخصي' : 'قارئ البطاقة الموحدة والجواز',
+                      subtitle: 'قراءة MRZ والشريحة NFC — التحقق التشفيري الكامل من SOD غير مكتمل بعد',
                       icon: Icons.nfc_rounded,
                       color: auth.isAdmin ? const Color(0xFF10B981) : const Color(0xFF0F62FE),
                       onTap: () {
@@ -335,10 +323,24 @@ class _ServicesTabState extends State<ServicesTab> {
     };
   }
 
+  static void _showPlannedService(
+    BuildContext context, {
+    required String title,
+    required String description,
+  }) {
+    _showServiceModal(
+      context,
+      title: title,
+      description: description,
+      isConnected: false,
+    );
+  }
+
   static void _showServiceModal(
     BuildContext context, {
     required String title,
     required String description,
+    required bool isConnected,
   }) {
     showModalBottomSheet(
       context: context,
@@ -370,9 +372,9 @@ class _ServicesTabState extends State<ServicesTab> {
                     color: const Color(0xFF0F62FE).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(
-                    Icons.layers_outlined,
-                    color: Color(0xFF0F62FE),
+                  child: Icon(
+                    isConnected ? Icons.layers_outlined : Icons.construction_rounded,
+                    color: const Color(0xFF0F62FE),
                     size: 24,
                   ),
                 ),
@@ -405,19 +407,11 @@ class _ServicesTabState extends State<ServicesTab> {
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('تم فتح نافذة: $title'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: const Text(
-                'تقديم الطلب الآن',
-                style: TextStyle(fontWeight: FontWeight.w700),
+              onPressed: () => Navigator.of(ctx).pop(),
+              icon: Icon(isConnected ? Icons.check_rounded : Icons.close_rounded, size: 18),
+              label: Text(
+                isConnected ? 'حسناً' : 'إغلاق',
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
@@ -486,10 +480,12 @@ class _ServiceGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: items.map((item) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: item,
-      )).toList(),
+      children: items
+          .map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: item,
+              ))
+          .toList(),
     );
   }
 }

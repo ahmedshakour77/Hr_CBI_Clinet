@@ -1,58 +1,69 @@
 # Privacy Policy — CBI HR Application
 
-**Effective Date:** August 14, 2026  
+**Effective Date:** October 21, 2026  
 **Application Name:** CBI HR (`cbi_app`)
 
-This Privacy Policy describes how the **CBI HR** mobile application and backend service ("we", "our", or "us") collect, use, store, and protect user and device information when you use our application.
+This Privacy Policy describes how the **CBI HR** mobile application and backend service process employee, authentication, device, and identity-document information.
 
 ---
 
-## 1. Information We Collect
+## 1. Information We Process
 
-To provide single sign-on authentication, security management, and employee profile access, we process the following data:
+To provide single sign-on authentication, security management, employee profile access, and the optional identity-document workflow, the application may process:
 
 - **Employee Profile Data:** Full Name, Corporate Email Address, Position, Job Title, Department, Employee ID, Hire Date, and Birth Date.
-- **Identity & Authentication Identifiers:** Microsoft Entra ID Subject ID (`sub`), OpenID Connect ID tokens, and OAuth refresh tokens.
-- **Security & Passkey Credentials:** WebAuthn / FIDO2 public keys, credential IDs, and signature counters for passwordless authentication.
+- **Identity & Authentication Identifiers:** Microsoft Entra ID subject identifiers, OpenID Connect ID tokens, application session tokens, and OAuth refresh tokens.
+- **Security & Passkey Credentials:** WebAuthn / FIDO2 public keys, credential IDs, device labels, and signature counters. Raw fingerprint or Face ID templates are not provided to the application.
+- **Identity Document Data:** When the ID-reader feature is used, the application may process MRZ data, document numbers, issue/expiry dates, document photographs, and data read from an NFC identity-document chip.
+- **Biometric Portrait from Identity Documents:** Electronic identity documents may contain a facial portrait in ICAO Data Group 2 (DG2). This is document data read from the chip and is distinct from the fingerprint/Face ID biometric used by the operating system for Passkeys. When the workflow requires synchronization with the HR backend, the DG2 portrait may be transmitted to the backend together with the document record.
 
-### Biometric Data Protection Notice
-The CBI HR application **NEVER collects, receives, stores, or transmits raw biometric data** (such as fingerprint images or facial recognition templates). All biometric authentication is handled strictly on your device's hardware security enclave (Android Keystore / Apple Secure Enclave) via standard OS prompts.
+### Device biometric authentication notice
+
+The CBI HR application does **not** receive or store the raw fingerprint image, Face ID template, or other biometric template used by Android/iOS to unlock a Passkey. Passkey user verification is performed by the operating system and device security hardware.
 
 ---
 
-## 2. How We Use Your Data
+## 2. How We Use Data
 
-We use your data exclusively for operational and security purposes:
-- Authenticating employee identity via Microsoft Entra ID Single Sign-On (SSO).
-- Enabling fast, secure, passwordless logins using Passkeys (FIDO2 / WebAuthn).
-- Rendering your employee profile details inside the application.
-- Securing application endpoints against unauthorized access.
+Data is used for operational and security purposes, including:
+
+- Authenticating employee identity via Microsoft Entra ID Single Sign-On.
+- Enabling passwordless logins using Passkeys (FIDO2 / WebAuthn).
+- Rendering employee profile information and authorized HR services.
+- Managing registered Passkeys and devices.
+- Reading and, when explicitly used by an authorized workflow, synchronizing identity-document information with the HR backend.
+- Protecting application endpoints and maintaining security/audit controls.
 
 ---
 
 ## 3. Data Storage & Security
 
-- **Device Encryption:** Authentication tokens saved on your device are encrypted using hardware-backed keystores (Android Keystore and iOS Keychain with `first_unlock_this_device` accessibility rules).
-- **Network Encryption:** All communications between the app, Microsoft Entra ID, and our backend relying party server occur strictly over encrypted HTTPS/TLS 1.2+ connections.
+- **Device Credential Storage:** Authentication tokens are stored using platform secure storage backed by Android Keystore / iOS Keychain where supported.
+- **Network Encryption:** Communications with Microsoft Entra ID and the HR backend use HTTPS/TLS.
+- **Document Data:** Identity-document images and DG2 portrait data must be treated as sensitive identity data. Access should be restricted by backend authorization and audit logging, and retention should follow the institution's approved records policy.
+- **Passkeys:** The private Passkey credential is controlled by the platform credential provider and is not stored by the CBI HR backend.
 
 ---
 
-## 4. Third-Party Services
+## 4. Third-Party / Platform Services
 
-We interact only with trusted authentication infrastructure:
-- **Microsoft Entra ID:** OAuth 2.0 / OIDC identity provider.
-- **Google Play Services / Android Credential Manager:** FIDO2 / WebAuthn passkey provider.
+The application may interact with:
+
+- **Microsoft Entra ID** for OAuth 2.0 / OpenID Connect authentication.
+- **Android Credential Manager / Google Play Services** or **Apple Authentication Services / iCloud Keychain** for Passkeys, depending on device configuration.
+- **Platform camera and NFC frameworks** when the identity-document reader is explicitly used.
 
 ---
 
-## 5. Your Rights & Data Control
+## 5. User Rights & Data Control
 
-- **Sign Out:** You can sign out at any time to clear local session tokens from your device.
-- **Passkey Management:** Enrolled passkeys can be managed or deleted from your device settings (Google Password Manager or Apple Keychain).
-- **Account Deletion Requests:** To request deletion of your employee record, contact your corporate HR IT Administrator.
+- **Sign Out:** Users can sign out to clear local application session tokens.
+- **Passkey Management:** Registered Passkeys can be managed through the application where supported and through the device credential provider.
+- **Identity Documents:** Access, correction, retention, and deletion of official employee-document records are governed by the institution's HR/records policy and applicable authorization rules.
+- **Account / Record Requests:** Requests concerning employee records should be directed to the authorized HR/IT administration channel.
 
 ---
 
 ## 6. Contact Information
 
-For questions regarding this privacy policy or data security practices, contact your corporate HR IT Support team.
+For questions regarding this privacy policy, identity-document processing, or data security practices, contact the authorized corporate HR/IT support team.

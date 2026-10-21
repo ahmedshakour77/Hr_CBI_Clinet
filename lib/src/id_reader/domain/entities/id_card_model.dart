@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'mrz_data.dart';
 
-/// Represents a fully verified identity card or electronic passport
-/// extracted from both the visual MRZ and the secure NFC microchip.
+/// Represents identity-document data extracted from optical MRZ and, when
+/// available, the NFC chip. Cryptographic authenticity is reported separately
+/// and must only become true after full ICAO passive authentication.
 class IdCardModel {
   const IdCardModel({
     required this.documentNumber,
@@ -29,90 +30,53 @@ class IdCardModel {
     this.frontCardPhotoBytes,
     this.backCardPhotoBytes,
     this.isBacAuthenticated = false,
-    this.isSodHashVerified = false,
-    this.isDocumentValid = false,
+    bool isSodHashVerified = false,
+    bool isDocumentValid = false,
     this.rawMrz = '',
-  });
+  })  : isSodHashVerified = false,
+        // The NFC service historically supplied `true` after only finding DG
+        // hashes inside EF.SOD. That is not full ICAO passive authentication.
+        // Fail closed for NFC results until CMS signature + DS/CSCA chain
+        // validation is implemented. Optical-only validity can still represent
+        // non-expiration when no SOD claim was made.
+        isDocumentValid = isDocumentValid && !isSodHashVerified;
 
-  /// 9-character document identifier (or padded with check digit)
   final String documentNumber;
-
-  /// Document code (e.g., 'I', 'ID' for National ID, 'P' for Passport)
   final String documentType;
-
-  /// ISO 3166-1 alpha-3 code of issuing state (e.g. 'IRQ', 'USA', 'DEU')
   final String issuingCountry;
-
-  /// ISO 3166-1 alpha-3 code of cardholder nationality
   final String nationality;
-
-  /// Primary identifier / Family Name (Latin transliteration)
   final String surname;
-
-  /// Secondary identifiers / Given Names (Latin transliteration)
   final String givenNames;
-
-  /// Full Name in national script (Arabic / Kurdish) from DG11 or front OCR
   final String? fullNameArabic;
-
-  /// Mother's name (اسم الأم) from DG11 or front OCR
   final String? motherName;
-
-  /// Place of Birth (محل الولادة / المحافظة)
   final String? placeOfBirth;
-
-  /// Blood type (فصيلة الدم - e.g. 'O+', 'A+')
   final String? bloodType;
-
-  /// Cardholder sex ('M', 'F', or 'X')
   final String gender;
-
-  /// Cardholder date of birth
   final DateTime? dateOfBirth;
-
-  /// Document expiration date
   final DateTime? dateOfExpiry;
-
-  /// Document issuance date (تاريخ الإصدار)
   final DateTime? dateOfIssue;
-
-  /// Issuing Authority or Civil Status Directorate (جهة الإصدار / دائرة الأحوال)
   final String? issuingAuthority;
-
-  /// Optional personal / 12-digit national identification number (الرقم الوطني الموحد)
   final String? personalNumber;
-
-  /// Permanent address / residence
   final String? address;
-
-  /// Family / Civil registry record details (السجل والصحيفة)
   final String? civilRecord;
-
-  /// Biometric facial portrait extracted from Data Group 2 (DG2)
   final Uint8List? facePhotoBytes;
-
-  /// Digitized signature or mark extracted from Data Group 7 (DG7)
   final Uint8List? signaturePhotoBytes;
-
-  /// High-resolution camera photograph of the card front face
   final Uint8List? frontCardPhotoBytes;
-
-  /// High-resolution camera photograph of the card back face
   final Uint8List? backCardPhotoBytes;
-
-  /// True if Basic Access Control (BAC) mutual authentication succeeded
   final bool isBacAuthenticated;
 
-  /// True if Data Group hashes matched the hashes signed in EF.SOD
+  /// Full ICAO passive authentication status. This intentionally remains false
+  /// until EF.SOD CMS signature and the Document Signer -> CSCA trust chain are
+  /// validated, not merely until DG hashes are found in the SOD bytes.
   final bool isSodHashVerified;
 
-  /// Overall document integrity & expiration validity
+  /// Document validity used by the UI. NFC records that relied on the legacy
+  /// weak SOD check fail closed; optical-only records may still be considered
+  /// non-expired but are never reported as cryptographically authenticated.
   final bool isDocumentValid;
 
-  /// Raw MRZ string scanned from the card
   final String rawMrz;
 
-  /// Full concatenated cardholder name (Latin)
   String get fullName {
     final s = surname.trim();
     final g = givenNames.trim();
@@ -121,7 +85,6 @@ class IdCardModel {
     return '$g $s';
   }
 
-  /// Primary display name: Arabic full name if available, otherwise Latin full name
   String get displayName {
     if (fullNameArabic != null && fullNameArabic!.trim().isNotEmpty) {
       return fullNameArabic!.trim();
@@ -129,8 +92,6 @@ class IdCardModel {
     return fullName;
   }
 
-  /// Creates an [IdCardModel] from optical MRZ data alone (used for regular passports
-  /// or when NFC chip is bypassed/unavailable).
   factory IdCardModel.fromMrzOnly({
     required MrzData mrzData,
     Uint8List? frontCardPhotoBytes,
@@ -166,19 +127,15 @@ class IdCardModel {
     );
   }
 
-  /// Whether this document is a passport (regular or electronic)
   bool get isPassport =>
       documentType.toUpperCase().startsWith('P') ||
       documentType.toUpperCase().contains('PASS');
 
-  /// Whether the document has expired according to device clock
   bool get isExpired {
     if (dateOfExpiry == null) return false;
     return DateTime.now().isAfter(dateOfExpiry!);
   }
 
-  /// Converts the verified ID card record and all biometric photos into
-  /// standard JSON payload matching the backend API request specification.
   Map<String, dynamic> toApiPayload() {
     String? formatDate(DateTime? d) {
       if (d == null) return null;
@@ -223,7 +180,6 @@ class IdCardModel {
     };
   }
 
-  /// Exports National Card payload conforming directly to POST /api/documents/national-card
   Map<String, dynamic> toNationalCardApiPayload({String? employeeId}) {
     String formatDate(DateTime? d) {
       if (d == null) return '';
@@ -268,7 +224,6 @@ class IdCardModel {
     };
   }
 
-  /// Exports Passport payload conforming directly to POST /api/documents/passport
   Map<String, dynamic> toPassportApiPayload({
     String? employeeId,
     bool? isElectronic,
@@ -310,13 +265,13 @@ class IdCardModel {
       if (facePhotoBytes != null)
         'biometricPhotoBase64': base64Encode(facePhotoBytes!),
       'notes': electronic
-          ? 'تم المسح وقراءة الشريحة الذكية عبر NFC'
+          ? 'تم المسح وقراءة الشريحة الذكية عبر NFC — التحقق التشفيري الكامل من SOD غير مكتمل بعد'
           : 'تم المسح والقراءة الضوئية لصفحة الجواز',
     };
   }
 
   @override
   String toString() {
-    return 'IdCardModel(doc: $documentNumber, name: $displayName, nat: $nationality, valid: $isDocumentValid, hasFrontPhoto: ${frontCardPhotoBytes != null}, hasBackPhoto: ${backCardPhotoBytes != null})';
+    return 'IdCardModel(doc: $documentNumber, name: $displayName, nat: $nationality, valid: $isDocumentValid, passiveAuth: $isSodHashVerified, hasFrontPhoto: ${frontCardPhotoBytes != null}, hasBackPhoto: ${backCardPhotoBytes != null})';
   }
 }

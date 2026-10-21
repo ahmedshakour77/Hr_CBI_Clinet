@@ -9,7 +9,6 @@ import '../models/document_models.dart';
 import '../models/employee_profile.dart';
 import '../services/device_info_service.dart';
 
-/// Response payload from `POST /api/auth/microsoft-login` and `POST /api/auth/passkey/login/complete`.
 class ServerAuthResponse {
   const ServerAuthResponse({
     required this.accessToken,
@@ -44,7 +43,6 @@ class ServerAuthResponse {
   final Map<String, dynamic>? rawJson;
 }
 
-/// HTTP client talking to the CBI HR backend (`https://apihr.iraqservice.uk`).
 class HrApiClient {
   HrApiClient({http.Client? httpClient, Uri? baseUrl})
     : _http = httpClient ?? http.Client(),
@@ -91,9 +89,7 @@ class HrApiClient {
         body: body != null ? jsonEncode(body) : null,
       );
       debugPrint('[HTTP_API] <<< ${response.statusCode} POST $path (${response.body.length} bytes)');
-      debugPrint('[HTTP_API] Server Response: ${response.body}');
     } catch (error) {
-      debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
       throw AuthException(
         'تعذر الاتصال بالخادم ($path). يرجى التحقق من اتصال الإنترنت.',
         cause: error,
@@ -108,7 +104,6 @@ class HrApiClient {
     try {
       json = jsonDecode(response.body) as Map<String, dynamic>;
     } catch (_) {
-      debugPrint('[HTTP_API] !!! Failed to parse JSON response (${response.statusCode}): ${response.body}');
       if (response.statusCode >= 400) {
         throw AuthException(
           'فشل الطلب من الخادم (رمز الاستجابة ${response.statusCode}).',
@@ -120,8 +115,6 @@ class HrApiClient {
 
     if (response.statusCode >= 400) {
       final rawError = json['message'] ?? json['error'] ?? json['detail'] ?? json['title'];
-      debugPrint('[HTTP_API] !!! Server Error ${response.statusCode}: $rawError');
-
       final errorCode = rawError is String ? rawError.trim() : null;
       throw AuthException(
         _messageForError(errorCode, response.statusCode),
@@ -165,8 +158,6 @@ class HrApiClient {
         : 'فشل الطلب من الخادم (رمز الاستجابة $status).';
   }
 
-  /// Trades a verified Entra `id_token`, `email`, and `deviceInfo` for an app session token from the HR backend.
-  /// POST https://apihr.iraqservice.uk/api/auth/microsoft-login
   Future<ServerAuthResponse> exchangeMicrosoftIdToken({
     required String idToken,
     String? email,
@@ -182,11 +173,8 @@ class HrApiClient {
     return ServerAuthResponse.fromJson(json);
   }
 
-  /// Fetches the authenticated employee record.
-  /// GET https://apihr.iraqservice.uk/api/employees/me
   Future<EmployeeProfile> fetchProfile(String sessionToken) async {
     final uri = _uri('/api/employees/me');
-    debugPrint('[HTTP_API] >>> GET $uri');
     late final http.Response response;
     try {
       response = await _http.get(
@@ -196,30 +184,16 @@ class HrApiClient {
           'authorization': 'Bearer $sessionToken',
         },
       );
-      debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/employees/me (${response.body.length} bytes)');
     } catch (error) {
-      debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
       throw AuthException(
         'تعذر الاتصال بالخادم لجلب بيانات الموظف. يرجى التحقق من اتصال الإنترنت.',
         cause: error,
       );
     }
     final json = await _decode(response);
-    debugPrint('================= [/api/employees/me RESPONSE JSON] =================');
-    try {
-      final pretty = const JsonEncoder.withIndent('  ').convert(json);
-      for (final line in pretty.split('\n')) {
-        debugPrint(line);
-      }
-    } catch (_) {
-      debugPrint('$json');
-    }
-    debugPrint('====================================================================');
     return EmployeeProfile.fromJson(json);
   }
 
-  /// Fetches the employee profile photo thumbnail bytes.
-  /// GET /api/employees/{employeeID}/profile-photo/thumbnail
   Future<Uint8List?> fetchProfilePhoto(
     String sessionToken,
     String employeeId, {
@@ -229,29 +203,20 @@ class HrApiClient {
       path: '/api/employees/$employeeId/profile-photo/thumbnail',
       queryParameters: version != null ? {'v': '$version'} : null,
     );
-    debugPrint('[HTTP_API] >>> GET Profile Photo: $uri');
     try {
       final response = await _http.get(
         uri,
-        headers: {
-          'authorization': 'Bearer $sessionToken',
-        },
+        headers: {'authorization': 'Bearer $sessionToken'},
       );
-      debugPrint('[HTTP_API] <<< ${response.statusCode} GET Profile Photo (${response.bodyBytes.length} bytes)');
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         return response.bodyBytes;
       }
-    } catch (e) {
-      debugPrint('[HTTP_API] Notice: Could not load profile photo: $e');
-    }
+    } catch (_) {}
     return null;
   }
 
-  /// Fetches available employee self-services for the current user.
-  /// GET /api/services or GET /api/employees/me/services
   Future<List<Map<String, dynamic>>> fetchServices(String sessionToken) async {
     final uri = _uri('/api/services');
-    debugPrint('[HTTP_API] >>> GET $uri');
     try {
       final response = await _http.get(
         uri,
@@ -262,43 +227,33 @@ class HrApiClient {
       );
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          return decoded.cast<Map<String, dynamic>>();
-        }
+        if (decoded is List) return decoded.cast<Map<String, dynamic>>();
         if (decoded is Map<String, dynamic> && decoded['data'] is List) {
           return (decoded['data'] as List).cast<Map<String, dynamic>>();
         }
       }
-    } catch (e) {
-      debugPrint('[HTTP_API] Notice: /api/services not returned ($e), will use service catalog.');
-    }
+    } catch (_) {}
     return [];
   }
 
-  /// 1.1 Request Passkey Registration Options
-  /// POST /api/auth/passkey/register/options
   Future<Map<String, dynamic>> passkeyRegistrationOptions({
     required String sessionToken,
     String? deviceName,
   }) async {
-    return await _post(
+    return _post(
       '/api/auth/passkey/register/options',
       bearer: sessionToken,
-      body: {
-        if (deviceName != null && deviceName.isNotEmpty) 'deviceName': deviceName,
-      },
+      body: {if (deviceName != null && deviceName.isNotEmpty) 'deviceName': deviceName},
     );
   }
 
-  /// 1.2 Complete Passkey Registration
-  /// POST /api/auth/passkey/register/complete
   Future<Map<String, dynamic>> verifyPasskeyRegistration({
     required String sessionToken,
     required String optionsJson,
     required String attestationResponseJson,
     String? deviceName,
   }) async {
-    return await _post(
+    return _post(
       '/api/auth/passkey/register/complete',
       bearer: sessionToken,
       body: {
@@ -309,19 +264,10 @@ class HrApiClient {
     );
   }
 
-  /// 2.1 Request Passkey Login Challenge
-  /// POST /api/auth/passkey/login/options
-  Future<Map<String, dynamic>> passkeyLoginOptions({
-    required String employeeID,
-  }) async {
-    return await _post(
-      '/api/auth/passkey/login/options',
-      body: {'employeeID': employeeID},
-    );
+  Future<Map<String, dynamic>> passkeyLoginOptions({required String employeeID}) {
+    return _post('/api/auth/passkey/login/options', body: {'employeeID': employeeID});
   }
 
-  /// 2.2 Complete Passkey Login
-  /// POST /api/auth/passkey/login/complete
   Future<ServerAuthResponse> verifyPasskeyLogin({
     required String optionsJson,
     required String assertionResponseJson,
@@ -339,11 +285,8 @@ class HrApiClient {
     return ServerAuthResponse.fromJson(json);
   }
 
-  /// 3.1 Get Registered Passkeys for Current User
-  /// GET /api/auth/passkey/my-passkeys
   Future<List<Map<String, dynamic>>> getMyPasskeys(String sessionToken) async {
     final uri = _uri('/api/auth/passkey/my-passkeys');
-    debugPrint('[HTTP_API] >>> GET $uri');
     final response = await _http.get(
       uri,
       headers: {
@@ -351,23 +294,17 @@ class HrApiClient {
         'content-type': 'application/json',
       },
     );
-    debugPrint('[HTTP_API] <<< ${response.statusCode} GET ${uri.path} (${response.body.length} bytes)');
-    if (response.statusCode >= 400) {
-      debugPrint('[HTTP_API] Failed to fetch passkeys (${response.statusCode}): ${response.body}');
-      return [];
-    }
+    if (response.statusCode >= 400) return [];
     final decoded = jsonDecode(response.body);
     if (decoded is List) {
       return decoded.whereType<Map<String, dynamic>>().toList();
-    } else if (decoded is Map<String, dynamic> && decoded['passkeys'] is List) {
+    }
+    if (decoded is Map<String, dynamic> && decoded['passkeys'] is List) {
       return (decoded['passkeys'] as List).whereType<Map<String, dynamic>>().toList();
     }
     return [];
   }
 
-  /// 3.2 Freeze / Block or Permanently Delete a Passkey by ID
-  /// DELETE /api/auth/passkey/{id} (Freeze / Deactivate)
-  /// DELETE /api/auth/passkey/{id}?permanent=true (Permanently Delete from DB)
   Future<void> deletePasskey({
     required String sessionToken,
     required dynamic passkeyId,
@@ -377,7 +314,6 @@ class HrApiClient {
       '/api/auth/passkey/$passkeyId',
       permanent ? {'permanent': 'true'} : null,
     );
-    debugPrint('[HTTP_API] >>> DELETE $uri');
     final response = await _http.delete(
       uri,
       headers: {
@@ -385,7 +321,6 @@ class HrApiClient {
         'content-type': 'application/json',
       },
     );
-    debugPrint('[HTTP_API] <<< ${response.statusCode} DELETE ${uri.path}');
     if (response.statusCode >= 400) {
       throw AuthException(
         permanent
@@ -396,57 +331,44 @@ class HrApiClient {
     }
   }
 
-  /// Updates the authenticated employee's own national card / passport record.
-  /// POST /api/employees/me/national-card
   Future<Map<String, dynamic>> updateMyNationalCard({
     required String sessionToken,
     required IdCardModel idCard,
-  }) async {
-    return await _post(
+  }) {
+    return _post(
       '/api/employees/me/national-card',
       bearer: sessionToken,
       body: idCard.toApiPayload(),
     );
   }
 
-  /// HR Admin: Updates the national card / passport record for a specific employee.
-  /// POST /api/employees/{idOrNumber}/national-card
-  /// If the caller is a regular employee, the backend will reject with 403 Forbidden.
   Future<Map<String, dynamic>> updateEmployeeNationalCard({
     required String sessionToken,
     required String employeeIdOrNumber,
     required IdCardModel idCard,
-  }) async {
+  }) {
     final cleanId = employeeIdOrNumber.trim();
     if (cleanId.isEmpty || cleanId.toLowerCase() == 'me') {
       return updateMyNationalCard(sessionToken: sessionToken, idCard: idCard);
     }
-    return await _post(
+    return _post(
       '/api/employees/$cleanId/national-card',
       bearer: sessionToken,
       body: idCard.toApiPayload(),
     );
   }
 
-  /// Fetches the 3 official documents for the currently authenticated employee.
-  /// GET /api/documents/me
   Future<EmployeeDocumentsBundle> getMyDocuments(String sessionToken) async {
-    final uri = _uri('/api/documents/me');
-    debugPrint('[HTTP_API] >>> GET $uri');
     final response = await _http.get(
-      uri,
+      _uri('/api/documents/me'),
       headers: {
         'authorization': 'Bearer $sessionToken',
         'content-type': 'application/json',
       },
     );
-    debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/documents/me (${response.body.length} bytes)');
-    final json = await _decode(response);
-    return EmployeeDocumentsBundle.fromJson(json);
+    return EmployeeDocumentsBundle.fromJson(await _decode(response));
   }
 
-  /// Admin/Staff: Fetches the 3 official documents for a specified employee.
-  /// GET /api/documents/{employeeID}
   Future<EmployeeDocumentsBundle> getEmployeeDocuments(
     String sessionToken,
     String employeeId,
@@ -455,107 +377,95 @@ class HrApiClient {
     if (cleanId.isEmpty || cleanId.toLowerCase() == 'me') {
       return getMyDocuments(sessionToken);
     }
-    final uri = _uri('/api/documents/$cleanId');
-    debugPrint('[HTTP_API] >>> GET $uri');
     final response = await _http.get(
-      uri,
+      _uri('/api/documents/$cleanId'),
       headers: {
         'authorization': 'Bearer $sessionToken',
         'content-type': 'application/json',
       },
     );
-    debugPrint('[HTTP_API] <<< ${response.statusCode} GET /api/documents/$cleanId (${response.body.length} bytes)');
-    final json = await _decode(response);
-    return EmployeeDocumentsBundle.fromJson(json);
+    return EmployeeDocumentsBundle.fromJson(await _decode(response));
   }
 
-  /// Adds or updates a Passport (Electronic or Regular).
-  /// POST /api/documents/passport
   Future<Map<String, dynamic>> savePassport({
     required String sessionToken,
     required Map<String, dynamic> payload,
-  }) async {
-    return await _post(
-      '/api/documents/passport',
-      bearer: sessionToken,
-      body: payload,
-    );
+  }) {
+    return _post('/api/documents/passport', bearer: sessionToken, body: payload);
   }
 
-  /// Adds or updates a Residence Card (بطاقة السكن).
-  /// POST /api/documents/residence
   Future<Map<String, dynamic>> saveResidence({
     required String sessionToken,
     required Map<String, dynamic> payload,
-  }) async {
-    return await _post(
-      '/api/documents/residence',
-      bearer: sessionToken,
-      body: payload,
-    );
+  }) {
+    return _post('/api/documents/residence', bearer: sessionToken, body: payload);
   }
 
-  /// Adds or updates a National Card (البطاقة الوطنية الموحدة).
-  /// POST /api/documents/national-card
   Future<Map<String, dynamic>> saveNationalCard({
     required String sessionToken,
     required Map<String, dynamic> payload,
-  }) async {
-    return await _post(
-      '/api/documents/national-card',
-      bearer: sessionToken,
-      body: payload,
-    );
+  }) {
+    return _post('/api/documents/national-card', bearer: sessionToken, body: payload);
   }
 
-  /// Fetches authenticated document images (e.g. /api/national-cards/55/front-image)
+  Uri? _trustedAuthenticatedResourceUri(String relativeOrAbsoluteUrl) {
+    final raw = relativeOrAbsoluteUrl.trim();
+    if (raw.isEmpty) return null;
+
+    final candidate = Uri.tryParse(raw);
+    if (candidate == null) return null;
+
+    final resolved = candidate.hasScheme ? candidate : _baseUrl.resolveUri(candidate);
+    final sameOrigin = resolved.scheme.toLowerCase() == _baseUrl.scheme.toLowerCase() &&
+        resolved.host.toLowerCase() == _baseUrl.host.toLowerCase() &&
+        resolved.port == _baseUrl.port;
+
+    if (!sameOrigin || resolved.scheme.toLowerCase() != 'https') {
+      return null;
+    }
+    return resolved;
+  }
+
   Future<Uint8List?> getAuthenticatedImageBytes(
     String sessionToken,
     String relativeOrAbsoluteUrl,
   ) async {
+    final uri = _trustedAuthenticatedResourceUri(relativeOrAbsoluteUrl);
+    if (uri == null) {
+      debugPrint('[HTTP_API] Refused authenticated resource outside configured API origin.');
+      return null;
+    }
+
     try {
-      final uri = relativeOrAbsoluteUrl.startsWith('http')
-          ? Uri.parse(relativeOrAbsoluteUrl)
-          : _uri(relativeOrAbsoluteUrl);
       final response = await _http.get(
         uri,
-        headers: {
-          'authorization': 'Bearer $sessionToken',
-        },
+        headers: {'authorization': 'Bearer $sessionToken'},
       );
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         return response.bodyBytes;
       }
-    } catch (e) {
-      debugPrint('[HTTP_API] Notice: could not fetch document image $relativeOrAbsoluteUrl: $e');
-    }
+    } catch (_) {}
     return null;
   }
 
-  /// HR Admin: Fetches the directory of ALL employees across all pages.
-  /// Automatically resolves server pagination (page / pageNumber / pageSize / limit / offset)
-  /// and loops until every single employee record is retrieved.
   Future<List<EmployeeProfile>> fetchAllEmployees(
     String sessionToken, {
     void Function(int loadedCount, int? totalCount)? onProgress,
   }) async {
-    // Strategy 1: Attempt to fetch with large pageSize to get all in one call if server permits
     try {
       final allAtOnce = await _tryFetchAllInOneCall(sessionToken);
       if (allAtOnce != null && allAtOnce.length > 50) {
-        debugPrint('[HTTP_API] Successfully retrieved all ${allAtOnce.length} employees in a single request!');
         onProgress?.call(allAtOnce.length, allAtOnce.length);
         return allAtOnce;
       }
     } catch (_) {}
 
-    // Strategy 2: Page-by-page fetching until exhausted
-    return await _fetchPaginatedEmployees(sessionToken, onProgress: onProgress);
+    return _fetchPaginatedEmployees(sessionToken, onProgress: onProgress);
   }
 
   Future<List<EmployeeProfile>?> _tryFetchAllInOneCall(String sessionToken) async {
     for (final paramName in ['pageSize', 'limit']) {
-      final uri = _uri('/api/employees', {paramName: '2000'});
+      final uri = _uri('/api/employees', {paramName: '5000'});
       try {
         final response = await _http.get(
           uri,
@@ -568,7 +478,7 @@ class HrApiClient {
           final decoded = jsonDecode(response.body);
           final list = _extractListFromDecoded(decoded);
           if (list.length > 50) {
-            return list.map((e) => EmployeeProfile.fromJson(e)).toList();
+            return list.map(EmployeeProfile.fromJson).toList();
           }
         }
       } catch (_) {}
@@ -584,22 +494,22 @@ class HrApiClient {
     final seenIds = <String>{};
     int page = 1;
     int? reportedTotal;
-    const int maxPages = 60; // Up to 3,000 employees
+    const pageSize = 50;
+    const maxPages = 1000;
 
     String pageParam = 'page';
     String sizeParam = 'pageSize';
 
     while (page <= maxPages) {
+      final pageValue = pageParam == 'offset'
+          ? ((page - 1) * pageSize).toString()
+          : page.toString();
       final query = <String, String>{
-        pageParam: page.toString(),
-        sizeParam: '50',
+        pageParam: pageValue,
+        sizeParam: pageSize.toString(),
       };
-      // For page 1, prefer plain endpoint first to match existing server contract
-      final uri = (page == 1)
-          ? _uri('/api/employees')
-          : _uri('/api/employees', query);
+      final uri = _uri('/api/employees', query);
 
-      debugPrint('[HTTP_API] >>> GET $uri (Page $page)');
       late final http.Response response;
       try {
         response = await _http.get(
@@ -609,10 +519,8 @@ class HrApiClient {
             'authorization': 'Bearer $sessionToken',
           },
         );
-        debugPrint('[HTTP_API] <<< ${response.statusCode} GET $uri (Page $page, ${response.body.length} bytes)');
       } catch (error) {
         if (page == 1) {
-          debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
           throw AuthException(
             'تعذر الاتصال بالخادم لجلب قائمة الموظفين. يرجى التحقق من اتصال الإنترنت.',
             cause: error,
@@ -628,15 +536,24 @@ class HrApiClient {
       }
 
       if (response.statusCode != 200) {
-        // If page 2 failed with query params, try alternative param names (pageNumber, offset)
-        if (page == 2 && pageParam == 'page') {
-          debugPrint('[HTTP_API] page 2 failed with "page", trying "pageNumber" param');
-          pageParam = 'pageNumber';
-          continue;
-        } else if (page == 2 && pageParam == 'pageNumber') {
-          debugPrint('[HTTP_API] page 2 failed with "pageNumber", trying "offset" param');
-          pageParam = 'offset';
-          continue;
+        if (page == 1 || page == 2) {
+          if (pageParam == 'page') {
+            pageParam = 'pageNumber';
+            page = 1;
+            allProfiles.clear();
+            seenIds.clear();
+            reportedTotal = null;
+            continue;
+          }
+          if (pageParam == 'pageNumber') {
+            pageParam = 'offset';
+            sizeParam = 'limit';
+            page = 1;
+            allProfiles.clear();
+            seenIds.clear();
+            reportedTotal = null;
+            continue;
+          }
         }
         if (page == 1) {
           throw AuthException(
@@ -660,22 +577,13 @@ class HrApiClient {
         break;
       }
 
-      if (page == 1 && decoded is Map<String, dynamic>) {
-        final meta = Map<String, dynamic>.from(decoded)
-          ..remove('data')
-          ..remove('employees')
-          ..remove('items')
-          ..remove('result');
-        debugPrint('[HTTP_API] /api/employees page 1 metadata: $meta');
-
+      if (decoded is Map<String, dynamic>) {
         final rawTotal = decoded['total'] ??
             decoded['totalCount'] ??
             decoded['totalEmployees'] ??
             decoded['count'] ??
             decoded['totalRecords'];
-        if (rawTotal is num) {
-          reportedTotal = rawTotal.toInt();
-        }
+        if (rawTotal is num) reportedTotal = rawTotal.toInt();
       }
 
       final list = _extractListFromDecoded(decoded);
@@ -684,9 +592,11 @@ class HrApiClient {
       int newOnThisPage = 0;
       for (final raw in list) {
         final profile = EmployeeProfile.fromJson(raw);
-        final id = profile.employeeID ?? '${profile.name}_${profile.jobTitle}_${allProfiles.length}';
-        if (!seenIds.contains(id)) {
-          seenIds.add(id);
+        final stableId = profile.employeeID?.trim();
+        final id = (stableId != null && stableId.isNotEmpty)
+            ? stableId
+            : '${profile.name}_${profile.jobTitle}_${allProfiles.length}';
+        if (seenIds.add(id)) {
           allProfiles.add(profile);
           newOnThisPage++;
         }
@@ -694,35 +604,33 @@ class HrApiClient {
 
       onProgress?.call(allProfiles.length, reportedTotal);
 
-      // If page 2 returned duplicate items from page 1, try alternative pagination style
-      if (newOnThisPage == 0 && page == 2) {
-        if (pageParam == 'page') {
-          debugPrint('[HTTP_API] page=2 returned duplicate items, switching to pageNumber parameter');
+      if (newOnThisPage == 0) {
+        if (page <= 2 && pageParam == 'page') {
           pageParam = 'pageNumber';
+          page = 1;
+          allProfiles.clear();
+          seenIds.clear();
+          reportedTotal = null;
           continue;
-        } else if (pageParam == 'pageNumber') {
-          debugPrint('[HTTP_API] pageNumber=2 returned duplicate items, switching to offset parameter');
-          pageParam = 'offset';
-          continue;
-        } else {
-          break;
         }
-      } else if (newOnThisPage == 0) {
+        if (page <= 2 && pageParam == 'pageNumber') {
+          pageParam = 'offset';
+          sizeParam = 'limit';
+          page = 1;
+          allProfiles.clear();
+          seenIds.clear();
+          reportedTotal = null;
+          continue;
+        }
         break;
       }
 
-      if (reportedTotal != null && allProfiles.length >= reportedTotal) {
-        break;
-      }
-
-      if (list.length < 50) {
-        break;
-      }
+      if (reportedTotal != null && allProfiles.length >= reportedTotal) break;
+      if (list.length < pageSize && reportedTotal == null) break;
 
       page++;
     }
 
-    debugPrint('[HTTP_API] Paginated fetch completed: loaded ${allProfiles.length} employees (total reported: $reportedTotal)');
     return allProfiles;
   }
 
@@ -741,15 +649,12 @@ class HrApiClient {
     return [];
   }
 
-  /// Fetches the full profile of a specific employee by ID or employee number.
-  /// GET /api/employees/{idOrNumber}
   Future<EmployeeProfile> fetchEmployeeDetails(String sessionToken, String idOrNumber) async {
     final cleanId = idOrNumber.trim();
     if (cleanId.isEmpty || cleanId.toLowerCase() == 'me') {
       return fetchProfile(sessionToken);
     }
     final uri = _uri('/api/employees/$cleanId');
-    debugPrint('[HTTP_API] >>> GET $uri');
     late final http.Response response;
     try {
       response = await _http.get(
@@ -759,9 +664,7 @@ class HrApiClient {
           'authorization': 'Bearer $sessionToken',
         },
       );
-      debugPrint('[HTTP_API] <<< ${response.statusCode} GET $uri (${response.body.length} bytes)');
     } catch (error) {
-      debugPrint('[HTTP_API] !!! Network error reaching $uri: $error');
       throw AuthException(
         'تعذر الاتصال بالخادم لجلب بيانات الموظف $cleanId.',
         cause: error,
@@ -774,8 +677,7 @@ class HrApiClient {
       );
     }
 
-    final json = await _decode(response);
-    return EmployeeProfile.fromJson(json);
+    return EmployeeProfile.fromJson(await _decode(response));
   }
 
   void dispose() => _http.close();
